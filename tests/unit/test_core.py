@@ -42,6 +42,14 @@ class TestAssignQnames(unittest.TestCase):
         self.assertEqual({d["qname"] for d in defs},
                          {"alt_init.c::app_init", "alt_init2.c::app_init"})
 
+    def test_same_file_ifdef_dup_gets_line_suffix(self):
+        # wpa 實例:同一檔內 #ifdef 兩分支各定義一次同名函式
+        defs = ig.assign_qnames([
+            n("eloop_init", "eloop.c", start=100, static=False),
+            n("eloop_init", "eloop.c", start=200, static=False)])
+        self.assertEqual({d["qname"] for d in defs},
+                         {"eloop.c::eloop_init", "eloop.c::eloop_init:200"})
+
     def test_same_name_different_kind_independent(self):
         defs = ig.assign_qnames([n("counter", "util.c"),
                                  n("counter", "util.c", kind="global")])

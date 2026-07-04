@@ -96,17 +96,23 @@ def detect_static(lines, line_no):
 
 def assign_qnames(defs):
     """D1 消歧名:static → `file::name`;非 static 同名多定義 → 全部 `file::name`;
-    其餘 → `name`。就地寫入每個 def 的 'qname'。"""
+    同檔仍撞名(#ifdef 分支各定義一次)→ 再加 `:line`;其餘 → `name`。
+    就地寫入每個 def 的 'qname'。"""
     groups = {}
     for d in defs:
         groups.setdefault((d["name"], d["kind"]), []).append(d)
+    seen = set()
     for (_name, _kind), grp in groups.items():
         dup = len(grp) > 1
         for d in grp:
             if d.get("is_static") or dup:
-                d["qname"] = f'{d["file"]}::{d["name"]}'
+                q = f'{d["file"]}::{d["name"]}'
             else:
-                d["qname"] = d["name"]
+                q = d["name"]
+            if (q, d["kind"]) in seen:                 # 同檔 #ifdef 雙定義
+                q = f'{q}:{d["line_start"]}'
+            seen.add((q, d["kind"]))
+            d["qname"] = q
     return defs
 
 
