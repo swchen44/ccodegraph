@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+cscope.out
+cscope.in.out
+cscope.po.out
+cscope.files
+*.db
