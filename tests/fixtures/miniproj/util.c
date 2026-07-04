@@ -9,3 +9,5 @@ static int helper(void) { return 1; }
 int use_helper(void) { return helper(); }
 
 int get_counter(void) { return counter; }
+
+void bump(void) { counter++; }

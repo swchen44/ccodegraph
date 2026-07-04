@@ -5,3 +5,5 @@ cscope.in.out
 cscope.po.out
 cscope.files
 *.db
+.ideal-graph.cscope.out
+*.building

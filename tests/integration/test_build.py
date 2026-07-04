@@ -126,6 +126,55 @@ class TestBuildMiniproj(unittest.TestCase):
             "SELECT src_file, dst_file FROM file_deps WHERE kind='calls'"))
         self.assertIn(("main.c", "util.c"), deps)   # main 呼叫 util.c 的 add
 
+    # ---- L3 callback / fnptr / manual ----
+
+    def test_callback_edge(self):
+        cb = self.pairs("callback")
+        self.assertIn(("sort_things", "callback.c::cmp"), cb)
+
+    def test_string_fake_call_no_edge(self):
+        # 字串內的 "cmp(x)" 不得造任何邊(12 場景 string_fake_call 防線)
+        for kind in ("callback", "calls"):
+            self.assertNotIn(("log_fake", "callback.c::cmp"),
+                             self.pairs(kind))
+
+    def test_fnptr_dispatch_edge(self):
+        self.assertIn(("dispatch_op", "ops.c::impl_run"), self.pairs("fnptr"))
+
+    def test_manual_link_edge(self):
+        self.assertIn(("dispatch_op", "extra_handler"), self.pairs("fnptr"))
+        conf = self.con.execute(
+            "SELECT confidence FROM edges WHERE origin='manual'").fetchone()[0]
+        self.assertEqual(conf, 1.0)
+
+    # ---- codex review 修正驗證 ----
+
+    def test_static_header_fn_callable_from_includer(self):
+        # codex 致命問題 3:static inline in .h
+        self.assertIn(("use_cfg", "sub1/config.h::cfg_get"),
+                      self.pairs("calls"))
+
+    def test_include_dup_basename_not_cross_linked(self):
+        # codex 高風險 4:重名 header 依 #include 內容比對
+        inc = self.pairs("includes")
+        self.assertIn(("caller.c", "sub1/config.h"), inc)
+        self.assertNotIn(("caller.c", "sub2/config.h"), inc)
+
+    def test_rmw_write_site_also_reads(self):
+        # codex 高風險 5:counter++ 同站點補 reads(meta.rmw)
+        self.assertIn(("bump", "counter"), self.pairs("writes"))
+        self.assertIn(("bump", "counter"), self.pairs("reads"))
+        metas = [m for (m,) in self.con.execute(
+            "SELECT e.meta FROM edges e JOIN nodes n1 ON n1.id=e.src "
+            "WHERE n1.name='bump' AND e.kind IN ('reads','writes')")]
+        self.assertTrue(any("rmw" in m for m in metas), metas)
+
+    def test_query_connection_readonly(self):
+        ro = sqlite3.connect(f"file:{self.db}?mode=ro", uri=True)
+        with self.assertRaises(sqlite3.OperationalError):
+            ro.execute("DELETE FROM edges")
+        ro.close()
+
     # ---- views / meta ----
 
     def test_edge_pairs_view_aggregates(self):
@@ -139,7 +188,7 @@ class TestBuildMiniproj(unittest.TestCase):
     def test_meta_provenance(self):
         engines = json.loads(self.con.execute(
             "SELECT value FROM meta WHERE key='engines_run'").fetchone()[0])
-        self.assertEqual(engines[0]["layer"], "L0+L1")
+        self.assertEqual(engines[0]["layers"], "L0+L1+L3")
 
 
 if __name__ == "__main__":

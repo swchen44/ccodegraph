@@ -45,8 +45,10 @@ class TestCLI(unittest.TestCase):
         out = self.run_cli("schema")
         self.assertIn("calls", out)
         self.assertIn("[cscope]", out)
+        self.assertIn("[fnptr]", out)        # L3 已填
+        self.assertIn("[callback]", out)
         self.assertIn("pending", out)
-        self.assertIn("fnptr", out)          # L3 未填要明講(P7)
+        self.assertIn("clangd", out)         # L4 未填要明講(P7)
 
     def test_callers_sectioned_for_dup_symbol(self):
         out = self.run_cli("callers", "app_init")
@@ -98,6 +100,26 @@ class TestCLI(unittest.TestCase):
         out = self.run_cli("who-includes", "util.h")
         self.assertIn("util.c", out)
         self.assertIn("main.c", out)
+
+    def test_callback_tagged_in_callers(self):
+        out = self.run_cli("callers", "cmp")
+        self.assertIn("sort_things", out)
+        self.assertIn("[callback]", out)
+
+    def test_fnptr_and_manual_in_callers(self):
+        out = self.run_cli("callers", "impl_run")
+        self.assertIn("dispatch_op", out)
+        self.assertIn("fnptr", out)
+        out2 = self.run_cli("callers", "extra_handler")
+        self.assertIn("dispatch_op", out2)
+        self.assertIn("manual", out2)
+
+    def test_impact_excludes_ambiguous_by_default(self):
+        # D4:ambiguous 邊(app_init 雙定義)預設不進 impact
+        out = self.run_cli("impact", "app_init", "-d", "1")
+        self.assertNotIn("do_start", out)
+        out2 = self.run_cli("impact", "app_init", "-d", "1", "--ambiguous")
+        self.assertIn("do_start", out2)
 
     def test_sql_escape_hatch(self):
         out = self.run_cli("sql", "SELECT COUNT(*) FROM nodes")

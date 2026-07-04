@@ -210,3 +210,29 @@ callers of eloop_init — 2 個定義,分節:
 
 理由:「clangd 沒看到」在 #ifdef 情境是重要線索(另一 config 的碼)、在同名情境是
 消歧依據——註記保留兩種解讀,降分會把資訊吃掉。
+
+## 8. 第三方紅隊審查處置(2026-07-05,codex gpt-5.5)
+
+完整報告:[reviews/2026-07-05-codex-redteam.md](reviews/2026-07-05-codex-redteam.md)。處置:
+
+**採納並已修(無衝突項):**
+- 原子性重建:build 寫 `.building` temp → `os.replace`(致命後果:半成品 DB)
+- cscope 索引隔離:專用 `.ideal-graph.cscope.out`,不污染使用者的 cscope.out
+- 外部工具失敗大聲死(`run_checked`,P7)
+- **static inline in header**:`choose_dst` 加 header 例外(codex 致命問題 3,真 bug)
+- 重名 header 錯連:includes 邊比對 `#include` 內容與 header 路徑後綴
+- read-modify-write:`x++`/`x+=`/`x=x+1` 站點雙向補償(reads↔writes,meta.rmw)
+- 查詢門檻落地:`--min-conf`(預設 0.7)進所有動詞
+- `sql` 動詞改唯讀連線(`mode=ro`);`first_site` 改可排序編碼
+
+**使用者裁決(2026-07-05,三題皆選折衷/維持):**
+- **D4**:ambiguous 邊 **callers 顯示(帶標籤)、impact 預設不走**,`--ambiguous` 全開
+  ——codex「假邊污染 impact」的攻擊成立,但全隱藏會讓 LLM 看不見雙候選事實
+- **D5**:callback confidence **維持 0.70、預設含 + [callback] 標籤**
+  ——實測 3/3 中、未見誤報;它是 cscope/clangd 全滅的最值錢邊,不因理論風險降級
+- **D3 維持**(meta-only,不加 resolution_state 欄)——L4 clangd 實作時以實際資料重估
+
+**認列 backlog(不阻擋):**
+- per-symbol subprocess 規模化(cscope -dl 常駐模式 / 批次)——數萬檔 repo 才會痛
+- node 層多引擎 provenance(`node_observations` 表)——L2 落地時一併
+- `edge_pairs` 物化 + 大 repo benchmark;CI job(裝 cscope+ctags 跑 integration)

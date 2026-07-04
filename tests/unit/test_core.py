@@ -1,5 +1,6 @@
 """Unit tests — 歸戶/消歧純函式(D1)與註記(D3),不碰 subprocess/sqlite。"""
 import json
+import typing
 import unittest
 
 import idealgraph as ig
@@ -20,6 +21,12 @@ class TestDetectStatic(unittest.TestCase):
 
     def test_non_static(self):
         self.assertFalse(ig.detect_static(["int f(void) {"], 1))
+
+    def test_prev_statement_static_does_not_leak(self):
+        # ops.c 誤判案例:上一行是完整 static 敘述(; 結尾)
+        lines = ["static struct ops OPS = { .run = impl_run };",
+                 "int dispatch_op(struct ops *o) { return o->run(); }"]
+        self.assertFalse(ig.detect_static(lines, 2))
 
     def test_static_in_word_not_token(self):
         # "staticky" 不是 static token
@@ -81,6 +88,11 @@ class TestAttributeSrc(unittest.TestCase):
 
 
 class TestChooseDst(unittest.TestCase):
+    def test_static_header_visible_to_includers(self):
+        # codex 致命問題 3:static inline in .h 可被 includer 呼叫
+        cands = [n("cfg_get", "sub1/config.h", static=True)]
+        self.assertEqual(len(ig.choose_dst(cands, "caller.c")), 1)
+
     def test_static_same_file_rule(self):
         cands = [n("helper", "util.c", static=True),
                  n("helper", "main.c", static=True)]
@@ -125,6 +137,79 @@ class TestConfidenceTable(unittest.TestCase):
         self.assertGreater(c["cscope"], c["treesitter"])
         self.assertGreaterEqual(c["callback"], 0.7)
         self.assertLess(c["git"], 0.7)
+
+
+
+
+class TestStripCLine(unittest.TestCase):
+    def test_string_literal_removed(self):
+        clean, blk = ig.strip_c_line('const char *s = "cmp(x)";', False)
+        self.assertNotIn("cmp", clean)
+        self.assertFalse(blk)
+
+    def test_line_comment_removed(self):
+        clean, _ = ig.strip_c_line("int x; // call cmp(x)", False)
+        self.assertNotIn("cmp", clean)
+
+    def test_block_comment_state_carries(self):
+        _clean, blk = ig.strip_c_line("int a; /* start", False)
+        self.assertTrue(blk)
+        clean2, blk2 = ig.strip_c_line("cmp(x) */ int b;", blk)
+        self.assertNotIn("cmp", clean2)
+        self.assertIn("int b;", clean2)
+        self.assertFalse(blk2)
+
+    def test_escaped_quote_in_string(self):
+        clean, _ = ig.strip_c_line(r'p = "a\"cmp(x)"; q(r);', False)
+        self.assertNotIn("cmp", clean)
+        self.assertIn("q(r)", clean)
+
+
+class TestCallbackHits(unittest.TestCase):
+    NAMES: typing.ClassVar[set[str]] = {"cmp", "handler", "my_sort"}
+
+    def test_fn_as_argument(self):
+        self.assertEqual(ig.callback_hits("my_sort(arr, cmp);", self.NAMES),
+                         ["cmp"])
+
+    def test_address_of(self):
+        self.assertEqual(ig.callback_hits("reg(&handler);", self.NAMES),
+                         ["handler"])
+
+    def test_assignment_not_callback(self):
+        # .field = fn 是 fnptr 註冊,不是 callback(prev 是 =)
+        self.assertEqual(ig.callback_hits(".run = cmp;", self.NAMES), [])
+
+    def test_direct_call_not_callback(self):
+        self.assertEqual(ig.callback_hits("cmp(a, b);", self.NAMES), [])
+
+
+class TestIsRmw(unittest.TestCase):
+    def test_increment(self):
+        self.assertTrue(ig.is_rmw("counter++;", "counter"))
+
+    def test_compound_assign(self):
+        self.assertTrue(ig.is_rmw("counter += 2;", "counter"))
+
+    def test_self_reference(self):
+        self.assertTrue(ig.is_rmw("counter = counter + 1;", "counter"))
+
+    def test_plain_write(self):
+        self.assertFalse(ig.is_rmw("counter = add(1, 2);", "counter"))
+
+
+class TestIncludeMatches(unittest.TestCase):
+    def test_basename(self):
+        self.assertTrue(ig.include_matches("config.h", "sub1/config.h"))
+
+    def test_dir_suffix_exact(self):
+        self.assertTrue(ig.include_matches("sub1/config.h", "sub1/config.h"))
+
+    def test_dir_suffix_mismatch(self):
+        self.assertFalse(ig.include_matches("sub1/config.h", "sub2/config.h"))
+
+    def test_deep_suffix(self):
+        self.assertTrue(ig.include_matches("a/b.h", "src/x/a/b.h"))
 
 
 if __name__ == "__main__":
