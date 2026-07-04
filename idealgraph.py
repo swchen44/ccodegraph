@@ -8,6 +8,8 @@ Schema 與決策見 docs/design.md;本檔實作 L0(ctags 節點)+ L1(cscope 邊)
 與查詢動詞。歸戶規則(D1):src 用行區間精確判定;dst 先套 static 同檔規則,
 殘餘非 static 同名 → 一對多掛靠 + ambiguous 註記(D3)。
 """
+from __future__ import annotations
+
 import argparse
 import concurrent.futures as cf
 import json
@@ -17,11 +19,15 @@ import sqlite3
 import subprocess
 import sys
 import time
+from typing import Any
+
+Def = dict[str, Any]          # 節點 dict:name/kind/file/line_start/line_end/is_static/qname/id
+CscopeRow = tuple[str, str, int]   # (field2, file, line)
 
 DB_NAME = ".ideal-graph.db"
 
 # design.md §3 — confidence 只表達「產生引擎的固有準確率」(D3)
-CONFIDENCE = {
+CONFIDENCE: dict[str, float] = {
     "manual": 1.00,
     "ctags": 0.95,
     "clangd": 0.95,
@@ -35,7 +41,7 @@ CONFIDENCE = {
 }
 
 # schema 動詞回報「格子還空著」用(design.md §5 填料計畫)
-PENDING_LAYERS = [
+PENDING_LAYERS: list[tuple[str, str]] = [
     ("treesitter", "L2: calls 聯集補充、K&R defs"),
     ("fnptr", "L3: ops/vtable 分派邊 + manual 表"),
     ("callback", "L3: fn-as-argument 邊"),
@@ -86,7 +92,7 @@ CREATE VIEW file_deps AS
 STATIC_RE = re.compile(r"\bstatic\b")
 
 
-def detect_static(lines, line_no):
+def detect_static(lines: list[str], line_no: int) -> bool:
     """定義行或其上一行含 `static` token(K&R 換行式)。lines 為 0-based list。"""
     for ln in (line_no - 1, line_no - 2):
         if 0 <= ln < len(lines) and STATIC_RE.search(lines[ln]):
@@ -94,21 +100,18 @@ def detect_static(lines, line_no):
     return False
 
 
-def assign_qnames(defs):
+def assign_qnames(defs: list[Def]) -> list[Def]:
     """D1 消歧名:static → `file::name`;非 static 同名多定義 → 全部 `file::name`;
     同檔仍撞名(#ifdef 分支各定義一次)→ 再加 `:line`;其餘 → `name`。
     就地寫入每個 def 的 'qname'。"""
-    groups = {}
+    groups: dict[tuple[str, str], list[Def]] = {}
     for d in defs:
         groups.setdefault((d["name"], d["kind"]), []).append(d)
-    seen = set()
-    for (_name, _kind), grp in groups.items():
+    seen: set[tuple[str, str]] = set()
+    for grp in groups.values():
         dup = len(grp) > 1
         for d in grp:
-            if d.get("is_static") or dup:
-                q = f'{d["file"]}::{d["name"]}'
-            else:
-                q = d["name"]
+            q = f'{d["file"]}::{d["name"]}' if d.get("is_static") or dup else str(d["name"])
             if (q, d["kind"]) in seen:                 # 同檔 #ifdef 雙定義
                 q = f'{q}:{d["line_start"]}'
             seen.add((q, d["kind"]))
@@ -116,12 +119,12 @@ def assign_qnames(defs):
     return defs
 
 
-def attribute_src(index, name, file, line):
+def attribute_src(index: dict[str, list[Def]], name: str, file: str, line: int) -> Def | None:
     """src 歸戶(D1,精確優先):
     1) 同名 + 同檔 + line 落在 [line_start, line_end] → 判定
     2) 同名 + 同檔唯一(ctags 缺 end 的 fallback)
     3) 全域唯一同名
-    否則 None(寧可漏報)。index: name -> [node dict]"""
+    否則 None(寧可漏報)。"""
     cands = index.get(name, [])
     hit = [c for c in cands
            if c["file"] == file and c["line_start"] <= line <= c["line_end"]]
@@ -135,15 +138,15 @@ def attribute_src(index, name, file, line):
     return None
 
 
-def choose_dst(cands, site_file):
+def choose_dst(cands: list[Def], site_file: str) -> list[Def]:
     """dst 歸戶(D1):static 只可能被同檔呼叫(C 語意)→ 先剔除異檔 static;
     回傳 viable list——len==1 是判定,>1 掛全部並標 ambiguous(D3),0 放棄。"""
     return [c for c in cands if not c["is_static"] or c["file"] == site_file]
 
 
-def edge_meta(viable_count, extra=None):
+def edge_meta(viable_count: int, extra: dict[str, Any] | None = None) -> str:
     """D3 註記:非 static 同名一對多掛靠時標 ambiguous。"""
-    m = dict(extra or {})
+    m: dict[str, Any] = dict(extra or {})
     if viable_count > 1:
         m.update({"ambiguous": True, "candidates": viable_count,
                   "rule": "non-static-dup"})
@@ -152,68 +155,67 @@ def edge_meta(viable_count, extra=None):
 
 # ---------------------------------------------------------------- 外部工具層
 
-def run(cmd, cwd):
+def run(cmd: list[str], cwd: str) -> str:
     return subprocess.run(cmd, cwd=cwd, capture_output=True, text=True).stdout
 
 
-def cscope_lines(root, qflag, sym):
+def cscope_lines(root: str, qflag: str, sym: str) -> list[CscopeRow]:
     """cscope -dL<q> sym → [(field2, file, line)];格式壞列丟棄。"""
-    out = []
-    for ln in run(["cscope", "-dL" + qflag, sym], root).splitlines():
-        p = ln.split(None, 3)
+    out: list[CscopeRow] = []
+    for raw in run(["cscope", "-dL" + qflag, sym], root).splitlines():
+        p = raw.split(None, 3)
         if len(p) >= 3 and p[2].isdigit():
             out.append((p[1], p[0], int(p[2])))
     return out
 
 
-def ctags_defs(root):
+def ctags_defs(root: str) -> list[Def]:
     """L0:ctags JSON → [{name, kind, file, line_start, line_end, is_static}]。
     kind: function|global(ctags f/v)。static 用定義行文字偵測(近似,見 design)。"""
     out = run(["ctags", "-R", "--languages=C,C++",
                "--kinds-C=f,v", "--kinds-C++=f,v",
                "--fields=+ne", "--output-format=json", "."], root)
-    src_cache = {}
-    defs = []
-    for ln in out.splitlines():
+    src_cache: dict[str, list[str]] = {}
+    defs: list[Def] = []
+    for raw in out.splitlines():
         try:
-            o = json.loads(ln)
+            o = json.loads(raw)
         except json.JSONDecodeError:
             continue
         if o.get("_type") != "tag":
             continue
         path = os.path.normpath(o["path"])
-        line = o.get("line", 0)
+        line = int(o.get("line", 0))
         if path not in src_cache:
             try:
                 with open(os.path.join(root, path), errors="replace") as f:
                     src_cache[path] = f.read().splitlines()
             except OSError:
                 src_cache[path] = []
-        kind = {"function": "function", "variable": "global"}.get(o.get("kind"))
+        kind = {"function": "function", "variable": "global"}.get(o.get("kind", ""))
         if not kind:
             continue
         defs.append({
             "name": o["name"], "kind": kind, "file": path,
-            "line_start": line, "line_end": o.get("end", line),
+            "line_start": line, "line_end": int(o.get("end", line)),
             "is_static": detect_static(src_cache[path], line),
         })
     return defs
 
 
-def source_files(root):
+def source_files(root: str) -> list[str]:
     exts = (".c", ".h", ".cc", ".cpp", ".hpp")
-    out = []
+    out: list[str] = []
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = [d for d in dirnames if not d.startswith(".")]
-        for fn in filenames:
-            if fn.endswith(exts):
-                out.append(os.path.relpath(os.path.join(dirpath, fn), root))
+        out.extend(os.path.relpath(os.path.join(dirpath, fn), root)
+                   for fn in filenames if fn.endswith(exts))
     return sorted(out)
 
 
 # ---------------------------------------------------------------- build
 
-def build(root, db_path, jobs):
+def build(root: str, db_path: str, jobs: int) -> None:
     for tool in ("cscope", "ctags"):
         try:
             subprocess.run([tool, "--version"], capture_output=True)
@@ -242,19 +244,23 @@ def build(root, db_path, jobs):
             (d["name"], d["qname"], d["kind"], d["file"], d["line_start"],
              d["line_end"], int(d["is_static"]), "ctags",
              CONFIDENCE["ctags"])).lastrowid
-    file_ids = {}
+    file_ids: dict[str, int] = {}
     for p in srcs:
-        file_ids[p] = con.execute(
+        rowid = con.execute(
             "INSERT INTO nodes (name,qname,kind,file,line_start,line_end,"
             "is_static,origin,confidence) VALUES (?,?,?,?,?,?,0,'ctags',1.0)",
             (os.path.basename(p), p, "file", p, 1, 1)).lastrowid
+        assert rowid is not None
+        file_ids[p] = rowid
 
-    fn_index, gv_index = {}, {}
+    fn_index: dict[str, list[Def]] = {}
+    gv_index: dict[str, list[Def]] = {}
     for d in defs:
         (fn_index if d["kind"] == "function" else gv_index) \
             .setdefault(d["name"], []).append(d)
 
-    def add_edge(src_id, dst_id, kind, file, line, origin, meta="{}"):
+    def add_edge(src_id: int, dst_id: int, kind: str, file: str, line: int,
+                 origin: str, meta: str = "{}") -> None:
         con.execute(
             "INSERT OR IGNORE INTO edges (src,dst,kind,file,line,origin,"
             "confidence,meta) VALUES (?,?,?,?,?,?,?,?)",
@@ -263,53 +269,51 @@ def build(root, db_path, jobs):
 
     fn_names = sorted(fn_index)
     gv_names = sorted(gv_index)
-    print(f"[L1] cscope 邊:calls(-dL3)×{len(fn_names)} + "
-          f"reads/writes×{len(gv_names)} + includes,{jobs} workers …")
+    print(f"[L1] cscope 邊:calls(-dL3)x{len(fn_names)} + "
+          f"reads/writes x{len(gv_names)} + includes,{jobs} workers …")
     with cf.ThreadPoolExecutor(max_workers=jobs) as ex:
         # calls:對每個函式名問「誰呼叫它」(-dL3;-dL2 會漏巢狀內層呼叫)
-        for name, rows in zip(fn_names,
-                              ex.map(lambda n: cscope_lines(root, "3", n),
-                                     fn_names)):
-            for caller, f, l in rows:
+        callers_of = ex.map(lambda n: cscope_lines(root, "3", n), fn_names)
+        for name, rows in zip(fn_names, callers_of, strict=True):
+            for caller, f, ln in rows:
                 if caller in ("<global>", "<unknown>"):
                     continue
-                src = attribute_src(fn_index, caller, f, l)
+                src = attribute_src(fn_index, caller, f, ln)
                 if not src:
                     continue
                 viable = choose_dst(fn_index[name], f)
                 meta = edge_meta(len(viable))
                 for dst in viable:
                     if dst["id"] != src["id"]:
-                        add_edge(src["id"], dst["id"], "calls", f, l,
+                        add_edge(src["id"], dst["id"], "calls", f, ln,
                                  "cscope", meta)
-        # reads/writes:reads = L0 站點 − L9 站點(design §2 狀態家族)
-        for name, refs, writes in zip(
-                gv_names,
-                ex.map(lambda n: cscope_lines(root, "0", n), gv_names),
-                ex.map(lambda n: cscope_lines(root, "9", n), gv_names)):
-            wsites = {(f, l) for _fn, f, l in writes}
+        # reads/writes:reads = L0 站點 - L9 站點(design §2 狀態家族)
+        refs_of = ex.map(lambda n: cscope_lines(root, "0", n), gv_names)
+        writes_of = ex.map(lambda n: cscope_lines(root, "9", n), gv_names)
+        for name, refs, writes in zip(gv_names, refs_of, writes_of, strict=True):
+            wsites = {(f, ln) for _fn, f, ln in writes}
             for kind, rows in (("writes", writes), ("reads", refs)):
-                for fn, f, l in rows:
+                for fn, f, ln in rows:
                     if fn in ("<global>", "<unknown>"):
                         continue
-                    if kind == "reads" and (f, l) in wsites:
+                    if kind == "reads" and (f, ln) in wsites:
                         continue
-                    src = attribute_src(fn_index, fn, f, l)
+                    src = attribute_src(fn_index, fn, f, ln)
                     if not src:
                         continue
                     viable = choose_dst(gv_index[name], f)
                     meta = edge_meta(len(viable))
                     for dst in viable:
-                        add_edge(src["id"], dst["id"], kind, f, l,
+                        add_edge(src["id"], dst["id"], kind, f, ln,
                                  "cscope", meta)
         # includes:file → file(cscope -dL8,C 獨有的直接訊號)
         headers = [p for p in srcs if p.endswith((".h", ".hpp"))]
-        for hdr, rows in zip(headers,
-                             ex.map(lambda h: cscope_lines(
-                                 root, "8", os.path.basename(h)), headers)):
-            for _f2, f, l in rows:
+        includers = ex.map(
+            lambda h: cscope_lines(root, "8", os.path.basename(h)), headers)
+        for hdr, rows in zip(headers, includers, strict=True):
+            for _f2, f, ln in rows:
                 if f in file_ids and f != hdr:
-                    add_edge(file_ids[f], file_ids[hdr], "includes", f, l,
+                    add_edge(file_ids[f], file_ids[hdr], "includes", f, ln,
                              "cscope")
 
     con.execute("INSERT INTO meta VALUES ('schema_version','1')")
@@ -328,10 +332,10 @@ def build(root, db_path, jobs):
 
 # ---------------------------------------------------------------- 查詢動詞
 
-def fmt_tags(origins, meta_json):
+def fmt_tags(origins: str, meta_json: str | None) -> str:
     tags = [origins]
     try:
-        m = json.loads(meta_json) if meta_json else {}
+        m: dict[str, Any] = json.loads(meta_json) if meta_json else {}
     except json.JSONDecodeError:
         m = {}
     if m.get("ambiguous"):
@@ -341,7 +345,8 @@ def fmt_tags(origins, meta_json):
     return "[" + "; ".join(tags) + "]"
 
 
-def node_candidates(con, sym, kinds):
+def node_candidates(con: sqlite3.Connection, sym: str,
+                    kinds: list[str]) -> list[tuple[Any, ...]]:
     ph = ",".join("?" * len(kinds))
     return con.execute(
         f"SELECT id,name,qname,kind,file,line_start,is_static FROM nodes "
@@ -349,7 +354,7 @@ def node_candidates(con, sym, kinds):
         (sym, sym, *kinds)).fetchall()
 
 
-def sectioned(con, sym, direction):
+def sectioned(con: sqlite3.Connection, sym: str, direction: str) -> None:
     """callers/callees:同名多定義 → 分節(D1)。direction: 'dst'=callers。"""
     cands = node_candidates(con, sym, ["function"])
     if not cands:
@@ -378,12 +383,12 @@ def sectioned(con, sym, direction):
             print()
 
 
-def cmd_schema(con):
+def cmd_schema(con: sqlite3.Connection) -> None:
     print("nodes:")
     for kind, cnt in con.execute(
             "SELECT kind, COUNT(*) FROM nodes GROUP BY kind ORDER BY kind"):
         print(f"  {kind:10s} {cnt}")
-    print("edges (kind × origin):")
+    print("edges (kind x origin):")
     for kind, origin, cnt in con.execute(
             "SELECT kind, origin, COUNT(*) FROM edges "
             "GROUP BY kind, origin ORDER BY kind"):
@@ -395,7 +400,7 @@ def cmd_schema(con):
             print(f"  {origin:12s} {desc}")
 
 
-def main():
+def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("verb", choices=["build", "schema", "callers", "callees",
                                      "impact", "globals", "vars-of",
@@ -441,10 +446,10 @@ def main():
                 GROUP BY u.depth ORDER BY u.depth""", (sid, a.depth)):
                 print(f"depth {depth}: {names}")
     elif a.verb == "globals":
-        cands = node_candidates(con, a.arg, ["global"])
-        if not cands:
+        gcands = node_candidates(con, a.arg, ["global"])
+        if not gcands:
             sys.exit(f'global "{a.arg}" not found')
-        for gid, _n, qname, *_ in cands:
+        for gid, _n, qname, *_rest in gcands:
             w = [r[0] for r in con.execute(
                 "SELECT DISTINCT n.qname FROM edges e JOIN nodes n "
                 "ON n.id=e.src WHERE e.dst=? AND e.kind='writes' "
@@ -460,13 +465,13 @@ def main():
             for s in r:
                 print(f"  {s}")
     elif a.verb == "vars-of":
-        for qn, kind, f, l in con.execute(
+        for qn, kind, f, ln in con.execute(
                 "SELECT n2.qname, e.kind, e.file, e.line FROM edges e "
                 "JOIN nodes n ON n.id=e.src JOIN nodes n2 ON n2.id=e.dst "
                 "WHERE (n.name=? OR n.qname=?) AND e.kind IN "
                 "('reads','writes') ORDER BY n2.qname, e.kind",
                 (a.arg, a.arg)):
-            print(f"{qn}  [{kind}]  @ {f}:{l}")
+            print(f"{qn}  [{kind}]  @ {f}:{ln}")
     elif a.verb == "who-includes":
         for (src_file,) in con.execute(
                 "SELECT DISTINCT e.file FROM edges e JOIN nodes n "

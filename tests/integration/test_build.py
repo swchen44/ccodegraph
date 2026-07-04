@@ -96,12 +96,12 @@ class TestBuildMiniproj(unittest.TestCase):
             self.assertEqual(m.get("candidates"), 2)
 
     def test_edges_carry_site_and_confidence(self):
-        f, l, conf = self.con.execute(
+        f, ln, conf = self.con.execute(
             "SELECT e.file, e.line, e.confidence FROM edges e "
             "JOIN nodes n2 ON n2.id=e.dst WHERE n2.qname='add' "
             "AND e.kind='calls'").fetchone()
         self.assertEqual(f, "main.c")
-        self.assertGreater(l, 0)
+        self.assertGreater(ln, 0)
         self.assertEqual(conf, ig.CONFIDENCE["cscope"])
 
     # ---- L1 reads/writes ----
