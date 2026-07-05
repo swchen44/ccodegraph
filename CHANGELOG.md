@@ -9,6 +9,8 @@ Pre-1.0 caveat (SemVer §4): anything MAY change at any time; the public API
 
 ## [Unreleased]
 
+## [0.0.3] - 2026-07-06
+
 ### Added
 
 - Multi-DB advanced workflow: `--db` documented as a universal parameter for
@@ -103,6 +105,7 @@ indexing, multi-engine fill, every row labelled with origin + confidence.
   callback 3/3; incremental 3.9 s; real-LLM A/B: correctness 5/5 vs 3/5
   against a grep-only agent (details in `docs/research/llm-ab.md`).
 
-[Unreleased]: https://github.com/swchen44/ccodegraph/compare/v0.0.2...HEAD
+[Unreleased]: https://github.com/swchen44/ccodegraph/compare/v0.0.3...HEAD
+[0.0.3]: https://github.com/swchen44/ccodegraph/compare/v0.0.2...v0.0.3
 [0.0.2]: https://github.com/swchen44/ccodegraph/compare/v0.0.1...v0.0.2
 [0.0.1]: https://github.com/swchen44/ccodegraph/releases/tag/v0.0.1
