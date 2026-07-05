@@ -1257,9 +1257,128 @@ def render_schema(res: dict[str, Any]) -> None:
         print(f"  {p['origin']:12s} {p['desc']}")
 
 
+SKILL_INSTALL_DIRS = [
+    "~/.claude/skills/ccodegraph", "~/.agents/skills/ccodegraph",
+    "./.claude/skills/ccodegraph", "./.agents/skills/ccodegraph",
+]
+
+
+def q_status(root: str, db: str) -> dict[str, Any]:
+    """#4 維護動詞(ccq status 血統):環境/skill/產物/出處/新鮮度,路徑全印。"""
+    res: dict[str, Any] = {"verb": "status", "root": root}
+    tools = {}
+    for t in ("ctags", "cscope", "clink", "git"):
+        p = tool_path(t) if t != "clink" else CLINK_BIN
+        try:
+            r = subprocess.run([p, "--version"], capture_output=True, text=True)
+            ver = (r.stdout or r.stderr).splitlines()[0].strip() if \
+                (r.stdout or r.stderr) else "?"
+        except FileNotFoundError:
+            ver = "not found"
+        env = f"CCODEGRAPH_{t.upper()}_PATH"
+        tools[t] = {"path": p, "version": ver,
+                    "env_override": env in os.environ
+                    or (t == "clink" and "CCODEGRAPH_CLINK" in os.environ)}
+    res["tools"] = tools
+    found = [os.path.expanduser(d) for d in SKILL_INSTALL_DIRS
+             if os.path.exists(os.path.join(os.path.expanduser(d), "SKILL.md"))]
+    res["skill"] = {"installed": found,
+                    "hint": None if found else
+                    "ccodegraph.py skill > ~/.claude/skills/ccodegraph/SKILL.md"}
+    pdir = os.path.join(root, PRODUCTS_DIR)
+    prods = []
+    if os.path.isdir(pdir):
+        for fn in sorted(os.listdir(pdir)):
+            fp = os.path.join(pdir, fn)
+            st = os.stat(fp)
+            prods.append({"path": fp, "size": st.st_size,
+                          "mtime": time.strftime("%Y-%m-%d %H:%M",
+                                                 time.localtime(st.st_mtime))})
+    res["products"] = prods
+    if not os.path.exists(db):
+        res["artifact"] = None
+        res["suggestion"] = f"no graph — run: ccodegraph.py build -p {root}"
+        return res
+    con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+    meta = dict(con.execute("SELECT key, value FROM meta"))
+    art: dict[str, Any] = {
+        "schema_version": meta.get("schema_version"),
+        "engines_run": json.loads(meta.get("engines_run", "[]")),
+        "nodes": con.execute("SELECT COUNT(*) FROM nodes").fetchone()[0],
+        "edges": con.execute("SELECT COUNT(*) FROM edges").fetchone()[0],
+    }
+    row = con.execute("SELECT git_rev FROM files WHERE git_rev IS NOT NULL "
+                      "LIMIT 1").fetchone()
+    art["built_at_git"] = row[0][:12] if row and row[0] else None
+    res["artifact"] = art
+    head = git_head(root)
+    res["git_now"] = head[:12] if head else None
+    old_hashes = dict(con.execute(
+        "SELECT path, content_hash FROM files WHERE content_hash IS NOT NULL"))
+    con.close()
+    srcs = source_files(root)
+    new_hashes = {p: file_hash(os.path.join(root, p)) for p in srcs}
+    changed, added, deleted = compute_changes(old_hashes, new_hashes)
+    drift = sorted(changed | added | deleted)
+    res["drift"] = {"changed": len(changed), "added": len(added),
+                    "deleted": len(deleted), "files": drift[:5]}
+    res["suggestion"] = (
+        f"{len(drift)} file(s) differ from the graph — run: "
+        f"ccodegraph.py build --incremental -p {root}" if drift
+        else "graph is aligned with the source tree")
+    return res
+
+
+def render_status(res: dict[str, Any]) -> None:
+    print(f"ccodegraph status — {res['root']}")
+    print("tools:")
+    for t, info in res["tools"].items():
+        ov = "  (env override)" if info["env_override"] else ""
+        print(f"  {t:7s} {info['path']}  —  {info['version']}{ov}")
+    sk = res["skill"]
+    if sk["installed"]:
+        print("skill  : " + "; ".join(sk["installed"]))
+    else:
+        print(f"skill  : not installed — {sk['hint']}")
+    print("products:")
+    for p in res["products"]:
+        print(f"  {p['path']}  {p['size']:,} B  {p['mtime']}")
+    if not res["products"]:
+        print("  (none)")
+    art = res.get("artifact")
+    if art:
+        print(f"artifact: schema v{art['schema_version']}, "
+              f"{art['nodes']} nodes, {art['edges']} edges")
+        for e in art["engines_run"]:
+            print(f"  engine: {e}")
+        if art.get("built_at_git"):
+            print(f"  built at git {art['built_at_git']}"
+                  + (f"; now {res['git_now']}" if res.get("git_now") else ""))
+        d = res["drift"]
+        if d["files"]:
+            print(f"drift  : changed={d['changed']} added={d['added']} "
+                  f"deleted={d['deleted']}: {', '.join(d['files'])}"
+                  + (" …" if d["changed"] + d["added"] + d["deleted"] > 5 else ""))
+    print(f"→ {res['suggestion']}")
+
+
+def reset_cmd(root: str) -> None:
+    """#4:清掉本專案全部產物(只碰 .ccodegraph/),逐項印出。"""
+    pdir = os.path.join(root, PRODUCTS_DIR)
+    if not os.path.isdir(pdir):
+        print(f"nothing to reset — {pdir} does not exist")
+        return
+    import shutil
+    for fn in sorted(os.listdir(pdir)):
+        print(f"removed {os.path.join(pdir, fn)}")
+    shutil.rmtree(pdir)
+    print(f"removed {pdir}/ — start over with: ccodegraph.py build -p {root}")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("verb", choices=["build", "clink-import", "schema", "skill",
+                                     "status", "reset",
                                      "explore", "callers", "callees",
                                      "impact", "globals", "vars-of",
                                      "who-includes", "co-changed", "sql"])
@@ -1295,6 +1414,15 @@ def main() -> None:
         return build(root, db, a.jobs, a.incremental)
     if a.verb == "clink-import":
         return clink_import(root, db, a.compdb)
+    if a.verb == "status":
+        res_s = q_status(root, db)
+        if a.json:
+            print(json.dumps(res_s, ensure_ascii=False))
+        else:
+            render_status(res_s)
+        return None
+    if a.verb == "reset":
+        return reset_cmd(root)
     if not os.path.exists(db):
         sys.exit(f"ERROR: no graph at {db} — run: ccodegraph.py build -p {root}")
     if a.verb not in ("schema",) and not a.arg:

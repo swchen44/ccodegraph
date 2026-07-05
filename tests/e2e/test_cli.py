@@ -205,6 +205,41 @@ class TestCLI(unittest.TestCase):
         self.assertIn("ambiguous N candidates", r.stdout)
         self.assertIn("asserted_by_user", r.stdout)
 
+    def test_status_full_report(self):
+        out = self.run_cli("status")
+        self.assertIn("tools:", out)
+        self.assertIn("ctags", out)
+        self.assertIn("cscope", out)
+        self.assertIn("products:", out)
+        self.assertIn("graph.db", out)
+        self.assertIn("artifact:", out)
+        self.assertIn("aligned", out)          # 剛建完 → 對齊
+
+    def test_status_detects_drift(self):
+        p = os.path.join(self.root, "drift_probe.c")
+        with open(p, "w") as fh:
+            fh.write("int drift_probe(void) { return 0; }\n")
+        try:
+            out = self.run_cli("status")
+            self.assertIn("added=1", out)
+            self.assertIn("build --incremental", out)
+        finally:
+            os.remove(p)
+
+    def test_reset_removes_products_dir(self):
+        import shutil as sh
+        tmp2 = tempfile.mkdtemp()
+        root2 = os.path.join(tmp2, "mp")
+        sh.copytree(FIXTURE, root2)
+        r = subprocess.run([sys.executable, CLI, "build", "-p", root2],
+                           capture_output=True, text=True)
+        assert r.returncode == 0
+        r = subprocess.run([sys.executable, CLI, "reset", "-p", root2],
+                           capture_output=True, text=True)
+        self.assertIn("removed", r.stdout)
+        self.assertFalse(os.path.exists(os.path.join(root2, ".ccodegraph")))
+        sh.rmtree(tmp2)
+
     def test_sql_escape_hatch(self):
         out = self.run_cli("sql", "SELECT COUNT(*) FROM nodes")
         self.assertGreater(int(out.strip()), 5)
