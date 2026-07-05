@@ -1,5 +1,6 @@
 """Unit tests — 歸戶/消歧純函式(D1)與註記(D3),不碰 subprocess/sqlite。"""
 import json
+import os
 import typing
 import unittest
 
@@ -313,19 +314,27 @@ class TestMergeCompileDbs(unittest.TestCase):
 
 
 class TestSynthesizeCompileDb(unittest.TestCase):
+    # 路徑用 tempdir + os.path.join 組期望值——Windows 反斜線相容(CI 首跑教訓)
+    def setUp(self):
+        import tempfile
+        self.root = os.path.realpath(tempfile.mkdtemp())
+
+    def _f(self, rel):
+        return os.path.join(self.root, rel)
+
     def test_cpp_gets_cxx_flags(self):
         # W3:C++ 檔不能被當 C 餵(-xc 會讓 C++ 解析失敗退回模糊)
-        entries = ig.synthesize_compile_db("/r", ["a.c", "b.cpp", "c.cc"])
+        entries = ig.synthesize_compile_db(self.root, ["a.c", "b.cpp", "c.cc"])
         by = {e["file"]: e["arguments"] for e in entries}
-        self.assertIn("-xc", by["/r/a.c"])
-        self.assertIn("-xc++", by["/r/b.cpp"])
-        self.assertIn("-std=gnu++17", by["/r/c.cc"])
+        self.assertIn("-xc", by[self._f("a.c")])
+        self.assertIn("-xc++", by[self._f("b.cpp")])
+        self.assertIn("-std=gnu++17", by[self._f("c.cc")])
 
     def test_entry_per_c_with_include_dirs(self):
         entries = ig.synthesize_compile_db(
-            "/r", ["src/a.c", "src/inc/x.h", "lib/y.h", "lib/b.c", "top.h"])
+            self.root, ["src/a.c", "src/inc/x.h", "lib/y.h", "lib/b.c", "top.h"])
         files = {e["file"] for e in entries}
-        self.assertEqual(files, {"/r/src/a.c", "/r/lib/b.c"})
+        self.assertEqual(files, {self._f("src/a.c"), self._f("lib/b.c")})
         args = entries[0]["arguments"]
         self.assertIn("-Isrc/inc", args)
         self.assertIn("-Ilib", args)
