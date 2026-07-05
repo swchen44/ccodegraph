@@ -53,7 +53,7 @@ pin one. Quote qnames in the shell (they contain `/` and `::`).
 | `impact X -d N` | transitive callers by depth. Default N=3; start N=2 on wide-fan-in symbols (log/util functions explode). Skips ambiguous edges by default → if it prints a hint about ambiguous edges, rerun with `--ambiguous` or you WILL underestimate the radius | before a refactor |
 | `globals V` | writers vs readers, separated | "who mutates this state" |
 | `vars-of F` | globals F touches, `[reads]`/`[writes]` with sites | audit a function's state footprint |
-| `who-includes H` | files **directly** including header H (NOT transitive — SQL template 4 for the closure) | header-edit impact |
+| `who-includes H` | files **directly** including header H, all `#include` spelling variants matched, already deduped — count lines directly, no re-verification needed (NOT transitive — SQL template 4 for the closure) | header-edit impact |
 | `co-changed F` | files historically changing with F (git). **Not subject to `--min-conf`** — statistical layer (conf 0.50), always shown with its count; weigh it yourself | "what else usually moves" |
 | `sql 'SELECT …'` | raw rows (connection is read-only) | anything the verbs don't shape |
 | `skill` | prints this file | air-gapped install |
