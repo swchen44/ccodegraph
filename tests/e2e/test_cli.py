@@ -187,6 +187,15 @@ class TestCLI(unittest.TestCase):
         self.assertTrue(d["callees"])
         self.assertTrue(any(g["access"] == "writes" for g in d["globals"]))
 
+    def test_products_confined_to_ccodegraph_dir(self):
+        # FR6:產物全在 .ccodegraph/、自動 .gitignore、root 不得出現 cscope.out
+        pdir = os.path.join(self.root, ".ccodegraph")
+        self.assertTrue(os.path.exists(os.path.join(pdir, "graph.db")))
+        self.assertTrue(os.path.exists(os.path.join(pdir, "cscope.out")))
+        with open(os.path.join(pdir, ".gitignore")) as fh:
+            self.assertEqual(fh.read().strip(), "*")
+        self.assertFalse(os.path.exists(os.path.join(self.root, "cscope.out")))
+
     def test_skill_verb_prints_risk_chapter(self):
         r = subprocess.run([sys.executable, CLI, "skill"],
                            capture_output=True, text=True)

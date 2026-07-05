@@ -7,7 +7,7 @@
 | FR3 fnptr 人工表 | registrations/links/壞 JSON/STALE 四向 | TestLoadManual(unit)+ test_manual_*(int)+ test_manual_stale_warning(e2e) |
 | FR4 消歧 D1 | static 同檔/header 例外/非 static 掛靠/同檔 #ifdef/行區間歸戶 | TestChooseDst、TestAttributeSrc、TestAssignQnames(unit)+ fixture 逐案(int) |
 | FR5 查詢動詞 | 各動詞 e2e golden 斷言;--min-conf 進 SQL;D4 impact 預設排 ambiguous | test_cli.py 全套 |
-| FR6 產物集中 | .ccodegraph/ 路徑 + 自動 .gitignore(建圖時寫入) | build();e2e 建圖路徑斷言(隱含);**待補顯式 e2e(backlog)** |
+| FR6 產物集中 | .ccodegraph/ 路徑 + 自動 .gitignore(建圖時寫入) | test_products_confined_to_ccodegraph_dir(e2e) |
 | FR7 git 增量 | up-to-date 早退/新邊/保留邊/刪檔/normalized diff=0 | TestIncremental(int)+ wpa 真機(design §9 L5 行) |
 | FR8 查詢層 for LLM | SKILL 觸發實測(codex 第三輪 10 題)+ 真 LLM A/B | docs/reviews/…round3 + docs/research/llm-ab.md |
 | FR9 --json 雙軌 | JSON 欄位與文字一致斷言 | test_json_*(e2e) |
