@@ -352,7 +352,7 @@ vs 使用者原話「查詢層等 DB 完整後」)。測試缺口 T1-T8 入 road
 | R6 | Rust 移植研究(傳聞 10x;等功能完整 + schema 穩定) | ⬜ 研究項 | D8:合約不動,引擎可換 |
 | R7 | clink 研究:clone 實跑、萃取改良點 | ✅ 2026-07-05 | [research/clink.md](research/clink.md):六洞察 + 實跑數據 |
 | R7a | clink 匯入器 PoC(symbols→edges,origin=clink)——no-build 就有解析期歸戶 calls + 語意級 writes(原生抓到 counter++) | ⬜ **高優先**(升級) | 排 L3b/R2 之後、L4 之前;可能取代部分 L4 |
-| R4a | token A/B spike(5-10 個 agent 任務,量 grep/Read vs 圖查詢的 token) | ⬜ 已裁決:排 L3b+R2 之後 | 使用者 2026-07-05:「照建議,先存 TODO」 |
+| R4a | token A/B spike(8 任務,byte 代理) | ✅ 2026-07-05 | [research/token-spike.md](research/token-spike.md):整體 13×、中位 44×;W1 代理層成立;T4 揭露 impact 空結果提示缺口(已修);真 LLM A/B 留 R4 |
 | T1-T8 | codex R2 測試缺口:traceability matrix、schema golden、manual 表測試、消歧逐條 fixture、動詞 golden stdout、產物目錄 e2e、增量情境族、GT 四 suite 化 | ⬜ backlog | 隨各層實作攤還 |
 | — | FR9 `--json` 雙軌輸出 | ⬜ R4 一併 | LLM 自選格式 |
 | — | 改名 ccodegraph + 產物歸位 .ccodegraph/(D6/D9) | ✅ 2026-07-05 | |

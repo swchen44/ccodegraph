@@ -773,6 +773,7 @@ def main() -> None:
         if not starts:
             sys.exit(f'symbol "{a.arg}" not found')
         for sid in starts:
+            printed = 0
             for depth, names in con.execute("""
                 WITH RECURSIVE up(id, depth) AS (
                   SELECT :sid, 0
@@ -789,6 +790,15 @@ def main() -> None:
                     {"sid": sid, "mc": a.min_conf,
                      "amb": int(a.ambiguous), "dep": a.depth}):
                 print(f"depth {depth}: {names}")
+                printed += 1
+            if printed == 0 and not a.ambiguous:
+                n_amb = con.execute(
+                    "SELECT COUNT(*) FROM edges WHERE dst=? AND "
+                    "instr(meta, '\"ambiguous\"') > 0", (sid,)).fetchone()[0]
+                if n_amb:
+                    print(f"(no unambiguous impact; {n_amb} ambiguous edges "
+                          f"exist — rerun with --ambiguous to include "
+                          f"multi-candidate attributions)")
     elif a.verb == "globals":
         gcands = node_candidates(con, a.arg, ["global"])
         if not gcands:
