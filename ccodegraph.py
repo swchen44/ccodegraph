@@ -26,6 +26,8 @@ import sys
 import time
 from typing import Any
 
+VERSION = "0.0.1"
+
 Def = dict[str, Any]          # 節點 dict:name/kind/file/line_start/line_end/is_static/qname/id
 CscopeRow = tuple[str, str, int, str]   # (field2, file, line, text)
 
@@ -1511,6 +1513,8 @@ def reset_cmd(root: str) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument("--version", action="version",
+                    version=f"ccodegraph {VERSION}")
     ap.add_argument("verb", choices=["build", "clink-import", "schema", "skill",
                                      "status", "reset", "viz",
                                      "explore", "callers", "callees",

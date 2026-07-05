@@ -1,6 +1,6 @@
 [project]
 name = "ccodegraph"
-version = "0.1.0"
+version = "0.0.1"
 description = "ccodegraph:C/C++ 知識圖譜——整合 ctags/cscope/tree-sitter/clangd,多引擎分層填料、標注 origin/confidence"
 requires-python = ">=3.10"
 
