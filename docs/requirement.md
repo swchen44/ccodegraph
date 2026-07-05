@@ -15,9 +15,10 @@
 `file:line` 再去讀原始碼——不是反過來先 grep 再猜。這個順序就是 token 節省的來源。
 
 **W3. C 優先(80% 工時),C++ 輕量(20%)。** 我們的真實工作負載是 C(韌體、驅動、
-系統層);C++ 只求**資訊不漏**(符號、關係有記錄、標好來源),不追求語意深度
-(templates/overloads 交給 clangd 層,沒有 clangd 就誠實標注近似)。輕量、快,
-不為 20% 的場景拖慢 80%。
+系統層);C++ 的可證偽定義是:**保留 parser 可觀測到的符號與近似關係**(檔案照收、
+符號進節點、直接呼叫進邊、全部標 origin)。明確非目標:template 實例化、overload
+解析、虛函式表——這些交給 clangd 層,沒有 clangd 就是近似。輕量、快,
+不為 20% 的場景拖慢 80%。(codex R2 審查:原「資訊不漏」無可達成定義,已改。)
 
 **W4. No-build 至上,compile DB 是升級不是門檻。** 80% 場景拿到的是編不起來的
 source tree。基礎層(ctags/cscope/tree-sitter)零 build 需求;有
@@ -52,12 +53,13 @@ Schema 定義必須自足、完整、不讓大模型困擾——LLM 只看 schem
 |----|------|
 | FR1 | **Schema 合約**(design §1):nodes/edges/files/meta + views;邊帶站點 `file:line`、`origin`、`confidence`、`meta` 註記;所有欄位與合法值在 design 文件完整列舉 |
 | FR2 | **分層填料**,每層獨立可重跑:L0 ctags 節點 → L1 cscope 邊 → L2 tree-sitter 聯集 → L3 fnptr/callback 啟發式 + **使用者人工表** → L4 clangd 升級 → L5 git 增量;未來開放私有 origin(asm flow 等) |
-| FR3 | **fnptr 使用者參數表**(ccq.fnptr.json 血統,必須保留):`registrations`(使用者指定 struct/field → handler)+ `links`(直接連線);manual 邊 confidence 1.0 永遠保留 |
+| FR3 | **fnptr 使用者參數表**(ccq.fnptr.json 血統,必須保留):`registrations`(使用者指定 struct/field → handler)+ `links`(直接連線);manual 邊 confidence 1.0——語意是 **asserted_by_user**(非「證明為真」),記錄來源檔 hash,來源變更時標 stale(codex R2 修正) |
 | FR4 | 同名消歧(D1):src 行區間精確歸戶;dst static 同檔規則(header 例外);殘餘 → ambiguous 註記 + 分節呈現 |
 | FR5 | 查詢:schema(第一動詞)/callers/callees/impact/globals/vars-of/who-includes/sql(唯讀);預設 confidence ≥ 0.7;ambiguous 邊 callers 顯示、impact 不走(D4) |
 | FR6 | **產物集中**:全部在 `<root>/.ccodegraph/`(graph.db、cscope.out、自動 `.gitignore`);未來 user 層狀態放平台 cache dir;**所有路徑可印出,不隱藏**(ccq 經驗) |
-| FR7 | git 增量(L5):content_hash + diff 圈重掃集;改 1 檔 <5s、圖 diff = 0 |
+| FR7 | git 增量(L5):content_hash + diff 圈重掃集;改 1 檔 <5s、**normalized 圖 diff = 0**(排除時間戳/git_rev 等 volatile 欄,只比 nodes/edges 內容,排序穩定化) |
 | FR8 | **查詢層為 LLM 設計**(R4,等 DB 完整後獨立設計):動詞 token 形狀、SKILL.md、「讓大模型知道如何使用」是驗收標準 |
+| FR9 | **輸出格式雙軌**:每個查詢動詞支援 `--json`——純文字(人讀/省 token)或 JSON(機器解析),**由 LLM 自行決定要哪種**;JSON schema 與文字欄位一一對應,列入 Schema Contract |
 
 ## 4. 非功能需求
 
@@ -74,9 +76,16 @@ Schema 定義必須自足、完整、不讓大模型困擾——LLM 只看 schem
 
 - **R6 Rust 移植**:傳聞 10× 速度;等 Python 版功能完整、schema 穩定後評估——
   schema 是合約,引擎換語言不換合約,所以現在不用為它做任何妥協。
+- **R7 clink 研究**(https://github.com/Smattr/clink):cscope 的現代重實作
+  (libclang 解析 + SQLite 儲存 + 吃 compile_commands.json)。clone 實跑、
+  萃取它對 cscope 的改良;評估當第四個填料 origin(尤其 compile-DB-aware 路線)。
 
 ## 6. 驗收(沿用實測 GT)
 
-- calls+callback:wpa cflow **28/28**、redis 73/73;fnptr `.scan2` **5/5**(已達成,L3)
-- defs:ctags GT ≥99.5%;12 場景誤報防線 pin 成測試
-- 增量(L5):改 1 檔 <5s,圖 diff = 0
+(需求只寫目標;完成進度見 design.md §9 Roadmap——codex R2:別把進度混進需求)
+
+- **Recall suite**:calls+callback wpa cflow 28/28、redis 73/73;fnptr `.scan2` 5/5;defs ≥99.5%
+- **Precision suite**:12 場景誤報防線 pin 成測試;ambiguous/callback 誤報抽查
+- **Portability suite**(R2 之後):三平台 ctags flavor;Windows 路徑
+- **Failure-mode suite**:工具缺失/壞輸出時的退化行為(見 design 退化矩陣)
+- 增量(L5):改 1 檔 <5s,normalized 圖 diff = 0
