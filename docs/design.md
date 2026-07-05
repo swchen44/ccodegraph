@@ -1,4 +1,6 @@
-# 理想程式碼知識圖譜 — Schema 設計(v0 草案)
+# ccodegraph — 設計(How)
+
+> Why/What 在 [requirement.md](requirement.md)。本文件是 schema 合約 + 演算法 + 決策記錄。
 
 > 設計依據:三家實測解剖(ccq benchmark 系列,2026-07)——
 > **cbm** 的邊分類學 + confidence、**CodeGraph** 的節點分類學 + 邊站點 + token 工程、
@@ -237,6 +239,30 @@ callers of eloop_init — 2 個定義,分節:
 - node 層多引擎 provenance(`node_observations` 表)——L2 落地時一併
 - `edge_pairs` 物化 + 大 repo benchmark;CI job(裝 cscope+ctags 跑 integration)
 
+## 8.5 定位決策(2026-07-05,使用者拍板;取捨原因是交接資產)
+
+**D6 改名 ccodegraph,C 80% / C++ 20% 輕量。**
+為什麼:真實工時 80% 在 C(no-build 韌體/驅動);C++ 只求資訊不漏(照收、標 origin),
+語意深度交給 clangd 層。取捨:不為 20% 場景引入重型 C++ 解析,速度與輕量優先。
+
+**D7 整合既有工具,不重寫解析器。**
+ctags/cscope/tree-sitter/clangd/clang AST 都是數十年引擎;我們的價值 = 組合 + 歸戶 +
+消歧 + 標注。origin 是開放集合——未來私有工具(組合語言級 flow)接入只是新增一個
+origin 值與 confidence 行,不改 schema。實測背書:cscope 直接邊 99% 級召回,自寫到不了。
+
+**D8 Schema 是合約,轉換是另一件工作。**
+Schema 必須自足到「LLM 只讀 schema 就會用」;填料引擎(哪個工具、哪種語言寫)
+可以整組換掉而合約不動——這也是 R6(Rust 移植)不影響現在任何決定的原因。
+
+**D9 產物集中 `<root>/.ccodegraph/`。**
+ccq 經驗直接繼承:graph.db、cscope.out、自動 `.gitignore` 全在一個專案層目錄,
+不污染使用者空間;未來若有 user 層狀態(daemon 等)放平台 cache dir,
+但**所有路徑必須可印出**——「不要隱藏」是使用者明示原則。
+
+**D10 分工哲學(寫給未來的查詢層,R4)。**
+重複機械工作 → 固定程式;LLM → 高階判斷(選工具、選資料、解讀含糊訊號)。
+圖譜提供基本 AST 級資訊;LLM 拿 `file:line` 精確讀碼是最後手段、不是起手式。
+
 ## 9. Roadmap(進度總覽;完成的打勾,順序即計畫)
 
 | # | 項目 | 狀態 | 備註 |
@@ -251,4 +277,6 @@ callers of eloop_init — 2 個定義,分節:
 | L4 | clangd 升級層(confirmed/absent 註記、signature、uses_type;需 compile DB) | ⬜ | D3 在此重估 |
 | L5 | git 層(co_changes 邊 + content_hash 增量;改 1 檔 <5s、圖 diff=0) | ⬜ | |
 | R4 | **查詢層設計(獨立階段,L0–L5 完整後)**:LLM 導向動詞 + SKILL.md(沿用 ccq 經驗:token 形狀、分節、標籤、schema 自省為第一動詞)——「重點是讓大語言模型知道如何使用」 | ⬜ 等完整 DB | 現有動詞是工程驗證用,非最終介面 |
-| R5 | VS Code plugin(友善 UI 讀同一份 .ideal-graph.db) | ⬜ 最後 | 應用層;DB 是唯一事實來源,plugin 只是另一個 reader |
+| R5 | VS Code plugin(友善 UI 讀同一份 graph.db) | ⬜ 最後 | 應用層;DB 是唯一事實來源,plugin 只是另一個 reader |
+| R6 | Rust 移植研究(傳聞 10x;等功能完整 + schema 穩定) | ⬜ 研究項 | D8:合約不動,引擎可換 |
+| — | 改名 ccodegraph + 產物歸位 .ccodegraph/(D6/D9) | ✅ 2026-07-05 | |
