@@ -26,7 +26,7 @@ import sys
 import time
 from typing import Any
 
-VERSION = "0.0.1"
+VERSION = "0.0.2"
 
 Def = dict[str, Any]          # 節點 dict:name/kind/file/line_start/line_end/is_static/qname/id
 CscopeRow = tuple[str, str, int, str]   # (field2, file, line, text)
