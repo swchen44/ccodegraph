@@ -67,3 +67,28 @@ defs 28340 / calls 67460(100% 帶 parent)/ refs 430956 / includes 3396 / assignm
 給出解析期歸戶的 calls + 語意級 writes,有 compile DB 則再升精度;匯入器只是
 SQL 翻譯(symbols → edges),完全符合 D7。confidence 建議 0.93(no-build fallback
 時 0.88,#ifdef 行為與 clangd 同屬單 config 視角,待 GT 實測定案)。
+
+## 補記 2(2026-07-05):no-build 的 libclang 到底能不能用?—— 合成 DB A/B
+
+問題(使用者):compile_commands.json 不一定存在,clink/libclang/clangd 是不是都派不上用場?
+
+**答案:能用,但要給它合成 DB;而且兩種 no-build 模式量的是不同的東西。**
+
+| wpa(620 檔,無 compile DB) | 裸 fallback | 合成 DB(每 .c 一條,-I 蓋全部 header 目錄) |
+|---|---|---|
+| +calls | 71,403 | 57,953 |
+| dropped(歸戶失敗) | 1,679 | **265** |
+| semantic absent | 1,091 | **13,895** |
+| 耗時 | 5s | 60s |
+
+- **裸模式**:clink 對解析失敗的檔退回模糊解析(README 明載)——全分支、高召回,
+  但把它當「語意確認」名不符實(absent 只有 1,091 = 低報)。
+- **合成 DB**:真 libclang 單 config 視角——include 解析改善讓歸戶失敗降 84%;
+  absent 暴增到 13,895 **不是變差,是誠實**:那正是無 -D 時 config-gated 碼的類別,
+  cscope-vs-clangd 二元性(72/73 vs 47/73)的重演。
+- 圖是聯集:cscope 全分支層(0.90)完整保留,semantic 層負責「這條在預設 config
+  下語意可見嗎」的註記——兩個視角都要,缺一不可(P6)。
+
+**設計落地(D12/D13)**:clink-import 的 compile DB 階梯 = `--compdb a,b,c`
+檔案層級合併(first-wins + 衝突逐筆回報)→ root/build 偵測 → **合成(預設)**。
+tree-sitter 在此題同樣幫不上:它是純語法,連「單 config 視角」都給不了。

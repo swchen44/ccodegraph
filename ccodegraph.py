@@ -661,6 +661,50 @@ def build(root: str, db_path: str, jobs: int) -> None:
           "`schema` 動詞會列出空格子。")
 
 
+# ------------------------------------------------- compile DB:合併與合成
+
+def merge_compile_dbs(paths: list[str]) -> tuple[list[dict[str, Any]], list[str]]:
+    """檔案層級合併(D12):多 target build 會有多份 compile_commands.json,
+    同一檔可能在不同 DB 有不同編譯規則。規則:
+    - 參數順序 = 優先權;同檔取第一個提到它的 DB 的規則(first wins)
+    - 只出現在後面 DB 的檔案照樣收(聯集——每個 target 獨有的檔都拿到自己的規則)
+    - 規則真的不同才記 conflict(逐筆回報,P7 不靜默)"""
+    merged: dict[str, dict[str, Any]] = {}
+    owners: dict[str, str] = {}
+    conflicts: list[str] = []
+    for p in paths:
+        try:
+            with open(p) as fh:
+                data = json.load(fh)
+        except (OSError, json.JSONDecodeError) as e:
+            sys.exit(f"ERROR: compile DB {p} unreadable: {e}")
+        if not isinstance(data, list):
+            sys.exit(f"ERROR: compile DB {p} is not a JSON array")
+        for entry in data:
+            key = os.path.normpath(
+                os.path.join(entry.get("directory", "."), entry["file"]))
+            rule = entry.get("arguments") or entry.get("command")
+            if key in merged:
+                prev = merged[key].get("arguments") or merged[key].get("command")
+                if rule != prev:
+                    conflicts.append(f"{key}: {owners[key]} wins over {p}")
+            else:
+                merged[key] = entry
+                owners[key] = p
+    return list(merged.values()), conflicts
+
+
+def synthesize_compile_db(root: str, srcs: list[str]) -> list[dict[str, Any]]:
+    """no-build 合成 DB(ccq 血統):每個 .c 一條,-I 蓋所有含 header 的目錄。
+    給不了真實 -D(單 config 盲點不變),但 include 解析大幅改善。"""
+    inc_dirs = sorted({os.path.dirname(p) for p in srcs
+                       if p.endswith(HEADER_EXTS) and os.path.dirname(p)})
+    base = ["cc", "-xc", "-std=gnu11", *[f"-I{d}" for d in inc_dirs]]
+    return [{"directory": root, "file": os.path.join(root, p),
+             "arguments": [*base, os.path.join(root, p)]}
+            for p in srcs if p.endswith((".c", ".cc", ".cpp"))]
+
+
 # ---------------------------------------------------------------- R7a: clink 匯入
 
 CLINK_BIN = os.environ.get("CCODEGRAPH_CLINK", "clink")
@@ -681,7 +725,8 @@ def load_graph_indexes(con: sqlite3.Connection) -> tuple[dict[str, list[Def]],
     return fn_index, gv_index
 
 
-def clink_import(root: str, db_path: str) -> None:
+def clink_import(root: str, db_path: str,
+                 compdb: str | None = None) -> None:
     """R7a:跑 clink -b 產 SQLite,翻譯成我們的邊(origin=clink)。
     category 語意(實測驗證,research/clink.md):1=call(parent=解析期歸戶)、
     4=assignment。層可重跑:先刪舊 clink 邊。D7:整合不重寫。"""
@@ -697,14 +742,41 @@ def clink_import(root: str, db_path: str) -> None:
     cdb = os.path.join(root, PRODUCTS_DIR, "clink.db")
     if os.path.exists(cdb):
         os.remove(cdb)
-    # L4:有 compile DB → config 精確視角,信心升 0.95(design §1.5)
+    # L4/D12 compile DB 階梯:--compdb 合併 → root/build 偵測 → 合成(ccq 血統)
+    pdir = os.path.join(root, PRODUCTS_DIR)
     cc_dir = None
-    for cand in (root, os.path.join(root, "build")):
-        if os.path.exists(os.path.join(cand, "compile_commands.json")):
-            cc_dir = cand
-            break
-    conf = 0.95 if cc_dir else CONFIDENCE["clink"]
-    mode = f"compile-DB({cc_dir})" if cc_dir else "no-build fallback"
+    if compdb:
+        paths = [os.path.abspath(os.path.join(root, p)) if not os.path.isabs(p)
+                 else p for p in compdb.split(",")]
+        entries, conflicts = merge_compile_dbs(paths)
+        with open(os.path.join(pdir, "compile_commands.json"), "w") as fh:
+            json.dump(entries, fh)
+        cc_dir = pdir
+        conf = 0.95
+        mode = (f"merged({len(paths)} DBs -> {len(entries)} files, "
+                f"{len(conflicts)} conflicts)")
+        if conflicts:
+            print(f"[D12] 同檔跨 DB 規則衝突 {len(conflicts)} 筆"
+                  f"(前者優先;順序=你給的參數順序):")
+            for c in conflicts[:5]:
+                print(f"      {c}")
+            if len(conflicts) > 5:
+                print(f"      … +{len(conflicts) - 5} more")
+    else:
+        for cand in (root, os.path.join(root, "build")):
+            if os.path.exists(os.path.join(cand, "compile_commands.json")):
+                cc_dir = cand
+                break
+        if cc_dir:
+            conf = 0.95
+            mode = f"compile-DB({cc_dir})"
+        else:
+            entries = synthesize_compile_db(root, source_files(root))
+            with open(os.path.join(pdir, "compile_commands.json"), "w") as fh:
+                json.dump(entries, fh)
+            cc_dir = pdir
+            conf = CONFIDENCE["clink"]
+            mode = f"synthesized({len(entries)} entries;無真實 -D,單 config 盲點仍在)"
     print(f"[R7a/L4] clink -b(libclang,{mode},conf {conf})…")
     cmd = [CLINK_BIN, "-b", "--database", cdb]
     if cc_dir:
@@ -884,6 +956,8 @@ def main() -> None:
     ap.add_argument("-j", "--jobs", type=int, default=8)
     ap.add_argument("--min-conf", type=float, default=DEFAULT_MIN_CONF,
                     help="查詢信心門檻(design §3;預設 0.7)")
+    ap.add_argument("--compdb", help="逗號分隔的多份 compile_commands.json,"
+                    "檔案層級合併(D12;順序=優先權)")
     ap.add_argument("--ambiguous", action="store_true",
                     help="impact 也走 ambiguous 邊(D4 預設不走)")
     a = ap.parse_args()
@@ -893,7 +967,7 @@ def main() -> None:
     if a.verb == "build":
         return build(root, db, a.jobs)
     if a.verb == "clink-import":
-        return clink_import(root, db)
+        return clink_import(root, db, a.compdb)
     if not os.path.exists(db):
         sys.exit(f"ERROR: no graph at {db} — run: ccodegraph.py build -p {root}")
     if a.verb not in ("schema",) and not a.arg:

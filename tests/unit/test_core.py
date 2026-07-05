@@ -267,5 +267,61 @@ class TestClassifyCtags(unittest.TestCase):
         self.assertEqual(ig.classify_ctags(""), "bsd")
 
 
+class TestMergeCompileDbs(unittest.TestCase):
+    def _db(self, tmp, name, entries):
+        import json as j
+        import os
+        p = os.path.join(tmp, name)
+        with open(p, "w") as fh:
+            j.dump(entries, fh)
+        return p
+
+    def test_file_level_union_and_first_wins(self):
+        import tempfile
+        t = tempfile.mkdtemp()
+        a = self._db(t, "a.json", [
+            {"directory": "/x", "file": "shared.c", "arguments": ["cc", "-DA"]},
+            {"directory": "/x", "file": "only_a.c", "arguments": ["cc"]}])
+        b = self._db(t, "b.json", [
+            {"directory": "/x", "file": "shared.c", "arguments": ["cc", "-DB"]},
+            {"directory": "/x", "file": "only_b.c", "arguments": ["cc"]}])
+        entries, conflicts = ig.merge_compile_dbs([a, b])
+        files = {e["file"] for e in entries}
+        self.assertEqual(files, {"shared.c", "only_a.c", "only_b.c"})  # 聯集
+        shared = next(e for e in entries if e["file"] == "shared.c")
+        self.assertIn("-DA", shared["arguments"])   # first wins
+        self.assertEqual(len(conflicts), 1)          # 規則不同 → 衝突回報
+
+    def test_identical_rules_not_conflict(self):
+        import tempfile
+        t = tempfile.mkdtemp()
+        e = {"directory": "/x", "file": "s.c", "arguments": ["cc"]}
+        a = self._db(t, "a.json", [e])
+        b = self._db(t, "b.json", [e])
+        _, conflicts = ig.merge_compile_dbs([a, b])
+        self.assertEqual(conflicts, [])
+
+    def test_bad_json_dies(self):
+        import os
+        import tempfile
+        t = tempfile.mkdtemp()
+        p = os.path.join(t, "bad.json")
+        with open(p, "w") as fh:
+            fh.write("{not-an-array")
+        with self.assertRaises(SystemExit):
+            ig.merge_compile_dbs([p])
+
+
+class TestSynthesizeCompileDb(unittest.TestCase):
+    def test_entry_per_c_with_include_dirs(self):
+        entries = ig.synthesize_compile_db(
+            "/r", ["src/a.c", "src/inc/x.h", "lib/y.h", "lib/b.c", "top.h"])
+        files = {e["file"] for e in entries}
+        self.assertEqual(files, {"/r/src/a.c", "/r/lib/b.c"})
+        args = entries[0]["arguments"]
+        self.assertIn("-Isrc/inc", args)
+        self.assertIn("-Ilib", args)
+
+
 if __name__ == "__main__":
     unittest.main()
