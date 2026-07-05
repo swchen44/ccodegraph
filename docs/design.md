@@ -106,7 +106,8 @@ C++ 補充(W3 輕量策略,L2+ 才填):`class` `method` `namespace` 以 best-eff
 | treesitter | L2 | 0.85 | ⬜ |
 | clangd / clangd-nobuild | L4 | 0.95 / 0.75 | ⬜ |
 | git | L5 | 0.50 | ⬜ |
-| (未來)clink、asm-flow 等 | — | 進場時定 | 註冊表開放 |
+| clink | R7a | 0.93(no-build libclang;單 config 視角同 clangd) | ✅ 選配 |
+| (未來)asm-flow 等 | — | 進場時定 | 註冊表開放 |
 
 confidence 語意:**產生引擎的固有準確率之初始預設值**(來源 = benchmark 附錄的實測,
 非普遍證明;失效條件 = precision suite 發現系統性誤報時下修)。
@@ -351,7 +352,7 @@ vs 使用者原話「查詢層等 DB 完整後」)。測試缺口 T1-T8 入 road
 | R5 | VS Code plugin(友善 UI 讀同一份 graph.db) | ⬜ 最後 | 應用層;DB 是唯一事實來源,plugin 只是另一個 reader |
 | R6 | Rust 移植研究(傳聞 10x;等功能完整 + schema 穩定) | ⬜ 研究項 | D8:合約不動,引擎可換 |
 | R7 | clink 研究:clone 實跑、萃取改良點 | ✅ 2026-07-05 | [research/clink.md](research/clink.md):六洞察 + 實跑數據 |
-| R7a | clink 匯入器 PoC(symbols→edges,origin=clink)——no-build 就有解析期歸戶 calls + 語意級 writes(原生抓到 counter++) | ⬜ **高優先**(升級) | 排 L3b/R2 之後、L4 之前;可能取代部分 L4 |
+| R7a | clink 匯入器(`clink-import` 動詞,origin=clink conf 0.93) | ✅ 2026-07-05 | wpa:+71403 calls/+215 writes/5s;GT 28/28 不退;**315 對 cscope 漏的 calls(巨集展開)**;層可重跑;選配(缺 clink 明講) |
 | R4a | token A/B spike(8 任務,byte 代理) | ✅ 2026-07-05 | [research/token-spike.md](research/token-spike.md):整體 13×、中位 44×;W1 代理層成立;T4 揭露 impact 空結果提示缺口(已修);真 LLM A/B 留 R4 |
 | T1-T8 | codex R2 測試缺口:traceability matrix、schema golden、manual 表測試、消歧逐條 fixture、動詞 golden stdout、產物目錄 e2e、增量情境族、GT 四 suite 化 | ⬜ backlog | 隨各層實作攤還 |
 | — | FR9 `--json` 雙軌輸出 | ⬜ R4 一併 | LLM 自選格式 |

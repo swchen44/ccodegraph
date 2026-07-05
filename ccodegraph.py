@@ -45,6 +45,7 @@ CONFIDENCE: dict[str, float] = {
     "cindex": 0.90,
     "treesitter": 0.85,
     "fnptr": 0.80,
+    "clink": 0.93,
     "clangd-nobuild": 0.75,
     "callback": 0.70,
     "git": 0.50,
@@ -55,6 +56,7 @@ PENDING_LAYERS: list[tuple[str, str]] = [
     ("treesitter", "L2: calls 聯集補充、K&R defs"),
     ("fnptr", "L3: ops/vtable 分派邊 + manual 表"),
     ("callback", "L3: fn-as-argument 邊"),
+    ("clink", "R7a: libclang 解析期歸戶 calls + 語意 writes(選配,需 clink binary)"),
     ("clangd", "L4: 高信心 calls/uses_type/signature 升級(需 compile DB)"),
     ("git", "L5: co_changes 邊 + 增量失效"),
 ]
@@ -637,6 +639,90 @@ def build(root: str, db_path: str, jobs: int) -> None:
           "`schema` 動詞會列出空格子。")
 
 
+# ---------------------------------------------------------------- R7a: clink 匯入
+
+CLINK_BIN = os.environ.get("CCODEGRAPH_CLINK", "clink")
+
+
+def load_graph_indexes(con: sqlite3.Connection) -> tuple[dict[str, list[Def]],
+                                                          dict[str, list[Def]]]:
+    """從既有 graph.db 重建 fn/gv 歸戶索引(D1 規則沿用)。"""
+    fn_index: dict[str, list[Def]] = {}
+    gv_index: dict[str, list[Def]] = {}
+    for nid, name, kind, file, ls, le, st in con.execute(
+            "SELECT id,name,kind,file,line_start,line_end,is_static "
+            "FROM nodes WHERE kind IN ('function','global')"):
+        d: Def = {"id": nid, "name": name, "kind": kind, "file": file,
+                  "line_start": ls, "line_end": le, "is_static": bool(st)}
+        (fn_index if kind == "function" else gv_index) \
+            .setdefault(name, []).append(d)
+    return fn_index, gv_index
+
+
+def clink_import(root: str, db_path: str) -> None:
+    """R7a:跑 clink -b 產 SQLite,翻譯成我們的邊(origin=clink)。
+    category 語意(實測驗證,research/clink.md):1=call(parent=解析期歸戶)、
+    4=assignment。層可重跑:先刪舊 clink 邊。D7:整合不重寫。"""
+    if not os.path.exists(db_path):
+        sys.exit(f"ERROR: no graph at {db_path} — run build first")
+    try:
+        subprocess.run([CLINK_BIN, "--version"], capture_output=True)
+    except FileNotFoundError:
+        sys.exit("ERROR: clink not found — R7a 是選配層。"
+                 "安裝:git clone https://github.com/Smattr/clink && cmake …;"
+                 "或設 CCODEGRAPH_CLINK=/path/to/clink")
+    t0 = time.time()
+    cdb = os.path.join(root, PRODUCTS_DIR, "clink.db")
+    if os.path.exists(cdb):
+        os.remove(cdb)
+    print("[R7a] clink -b(libclang 解析)…")
+    run_checked([CLINK_BIN, "-b", "--database", cdb, "."], root)
+
+    con = sqlite3.connect(db_path)
+    fn_index, gv_index = load_graph_indexes(con)
+    con.execute("DELETE FROM edges WHERE origin='clink'")
+
+    src_con = sqlite3.connect(f"file:{cdb}?mode=ro", uri=True)
+    n_calls = n_writes = n_drop = 0
+    for cat, name, parent, path, line in src_con.execute(
+            "SELECT s.category, s.name, s.parent, r.path, s.line "
+            "FROM symbols s JOIN records r ON r.id = s.path "
+            "WHERE s.category IN (1, 4)"):
+        if not parent:
+            continue
+        if os.path.isabs(path):
+            path = os.path.relpath(path, root)
+        src = attribute_src(fn_index, parent, path, line)
+        if not src:
+            n_drop += 1
+            continue
+        index = fn_index if cat == 1 else gv_index
+        kind = "calls" if cat == 1 else "writes"
+        viable = choose_dst(index.get(name, []), path)
+        meta = edge_meta(len(viable))
+        for dst in viable:
+            if dst["id"] != src["id"]:
+                con.execute(
+                    "INSERT OR IGNORE INTO edges (src,dst,kind,file,line,"
+                    "origin,confidence,meta) VALUES (?,?,?,?,?,'clink',?,?)",
+                    (src["id"], dst["id"], kind, path, line,
+                     CONFIDENCE["clink"], meta))
+                if kind == "calls":
+                    n_calls += 1
+                else:
+                    n_writes += 1
+    engines = json.loads(con.execute(
+        "SELECT value FROM meta WHERE key='engines_run'").fetchone()[0])
+    engines.append({"engine": "clink", "layer": "R7a",
+                    "seconds": round(time.time() - t0, 1)})
+    con.execute("UPDATE meta SET value=? WHERE key='engines_run'",
+                (json.dumps(engines),))
+    con.commit()
+    print(f"done: +calls={n_calls}, +writes={n_writes} (origin=clink, "
+          f"conf {CONFIDENCE['clink']}); dropped(no-src)={n_drop}; "
+          f"{time.time() - t0:.0f}s")
+
+
 # ---------------------------------------------------------------- 查詢動詞
 
 def fmt_site(padded: str | None) -> str:
@@ -737,8 +823,9 @@ def cmd_schema(con: sqlite3.Connection) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("verb", choices=["build", "schema", "callers", "callees",
-                                     "impact", "globals", "vars-of",
+    ap.add_argument("verb", choices=["build", "clink-import", "schema",
+                                     "callers", "callees", "impact",
+                                     "globals", "vars-of",
                                      "who-includes", "sql"])
     ap.add_argument("arg", nargs="?")
     ap.add_argument("-p", "--root", default=".")
@@ -755,6 +842,8 @@ def main() -> None:
 
     if a.verb == "build":
         return build(root, db, a.jobs)
+    if a.verb == "clink-import":
+        return clink_import(root, db)
     if not os.path.exists(db):
         sys.exit(f"ERROR: no graph at {db} — run: ccodegraph.py build -p {root}")
     if a.verb not in ("schema",) and not a.arg:

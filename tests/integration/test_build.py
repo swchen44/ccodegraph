@@ -213,5 +213,58 @@ class TestBuildMiniproj(unittest.TestCase):
         self.assertEqual(engines[0]["layers"], "L0+L1+L3")
 
 
+CLINK = os.environ.get("CCODEGRAPH_CLINK", "clink")
+
+
+@unittest.skipUnless(tools_ok() and shutil.which(CLINK),
+                     "needs clink binary (set CCODEGRAPH_CLINK)")
+class TestClinkImport(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.mkdtemp()
+        cls.root = os.path.join(cls.tmp, "miniproj")
+        shutil.copytree(FIXTURE, cls.root)
+        cls.db = os.path.join(cls.root, ig.DB_NAME)
+        ig.build(cls.root, cls.db, jobs=4)
+        ig.clink_import(cls.root, cls.db)
+        cls.con = sqlite3.connect(cls.db)
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.con.close()
+        shutil.rmtree(cls.tmp)
+
+    def test_clink_calls_edge_with_parse_time_parent(self):
+        rows = set(self.con.execute(
+            "SELECT n1.qname, n2.qname FROM edges e "
+            "JOIN nodes n1 ON n1.id=e.src JOIN nodes n2 ON n2.id=e.dst "
+            "WHERE e.origin='clink' AND e.kind='calls'"))
+        self.assertIn(("main", "add"), rows)
+        self.assertIn(("use_helper", "util.c::helper"), rows)
+
+    def test_clink_writes_edge_catches_increment(self):
+        # clink 語意層原生抓 counter++(cscope -L9 漏的)
+        rows = set(self.con.execute(
+            "SELECT n1.qname, n2.qname FROM edges e "
+            "JOIN nodes n1 ON n1.id=e.src JOIN nodes n2 ON n2.id=e.dst "
+            "WHERE e.origin='clink' AND e.kind='writes'"))
+        self.assertIn(("bump", "counter"), rows)
+
+    def test_rerunnable_no_duplicates(self):
+        before = self.con.execute(
+            "SELECT COUNT(*) FROM edges WHERE origin='clink'").fetchone()[0]
+        ig.clink_import(self.root, self.db)
+        con2 = sqlite3.connect(self.db)
+        after = con2.execute(
+            "SELECT COUNT(*) FROM edges WHERE origin='clink'").fetchone()[0]
+        con2.close()
+        self.assertEqual(before, after)
+
+    def test_engines_run_appended(self):
+        engines = json.loads(self.con.execute(
+            "SELECT value FROM meta WHERE key='engines_run'").fetchone()[0])
+        self.assertTrue(any(e.get("engine") == "clink" for e in engines))
+
+
 if __name__ == "__main__":
     unittest.main()
