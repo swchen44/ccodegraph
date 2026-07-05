@@ -219,7 +219,7 @@ callers of eloop_init — 2 個定義,分節:
 
 **採納並已修(無衝突項):**
 - 原子性重建:build 寫 `.building` temp → `os.replace`(致命後果:半成品 DB)
-- cscope 索引隔離:專用 `.ideal-graph.cscope.out`,不污染使用者的 cscope.out
+- cscope 索引隔離:專用 `.ccodegraph/cscope.out`,不污染使用者的 cscope.out
 - 外部工具失敗大聲死(`run_checked`,P7)
 - **static inline in header**:`choose_dst` 加 header 例外(codex 致命問題 3,真 bug)
 - 重名 header 錯連:includes 邊比對 `#include` 內容與 header 路徑後綴
