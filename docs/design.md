@@ -236,3 +236,19 @@ callers of eloop_init — 2 個定義,分節:
 - per-symbol subprocess 規模化(cscope -dl 常駐模式 / 批次)——數萬檔 repo 才會痛
 - node 層多引擎 provenance(`node_observations` 表)——L2 落地時一併
 - `edge_pairs` 物化 + 大 repo benchmark;CI job(裝 cscope+ctags 跑 integration)
+
+## 9. Roadmap(進度總覽;完成的打勾,順序即計畫)
+
+| # | 項目 | 狀態 | 備註 |
+|---|------|------|------|
+| L0 | ctags 節點 + qname 消歧 | ✅ 2026-07-05 | wpa 10605 節點 |
+| L1 | cscope 邊(calls/reads/writes/includes) | ✅ 2026-07-05 | 單層 26/28 |
+| L3 | callback + fnptr + manual 表 | ✅ 2026-07-05 | **wpa 28/28 + fnptr 5/5** |
+| — | ruff/mypy strict + 三層測試 + codex 紅隊處置 | ✅ 2026-07-05 | 75 tests |
+| R1 | **fnptr 人工表補全**:ccq.fnptr.json 血統的 `registrations`(使用者指定 struct/field → handler)+ `links`——**使用者可設定參數是既有承諾,必須保留**;manual 邊 confidence 1.0 永遠保留 | ⬜ 次一步 | L3 收尾 |
+| R2 | **ctags 跨平台相容**:macOS(BSD ctags)/Linux(Exuberant)/Windows 參數差異——啟動偵測 flavor、參數對映表、非 Universal Ctags 時大聲死 + 安裝指引;CI 三平台矩陣 | ⬜ L2 前必須 | BSD ctags GT 污染是 ccq 時代已踩過的坑 |
+| L2 | tree-sitter 聯集 builder(K&R/宣告子巢狀 defs) | ⬜ | origin=treesitter, 0.85 |
+| L4 | clangd 升級層(confirmed/absent 註記、signature、uses_type;需 compile DB) | ⬜ | D3 在此重估 |
+| L5 | git 層(co_changes 邊 + content_hash 增量;改 1 檔 <5s、圖 diff=0) | ⬜ | |
+| R4 | **查詢層設計(獨立階段,L0–L5 完整後)**:LLM 導向動詞 + SKILL.md(沿用 ccq 經驗:token 形狀、分節、標籤、schema 自省為第一動詞)——「重點是讓大語言模型知道如何使用」 | ⬜ 等完整 DB | 現有動詞是工程驗證用,非最終介面 |
+| R5 | VS Code plugin(友善 UI 讀同一份 .ideal-graph.db) | ⬜ 最後 | 應用層;DB 是唯一事實來源,plugin 只是另一個 reader |
