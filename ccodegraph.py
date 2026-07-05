@@ -69,6 +69,7 @@ CREATE TABLE nodes (
   name TEXT NOT NULL, qname TEXT NOT NULL, kind TEXT NOT NULL,
   file TEXT NOT NULL, line_start INTEGER, line_end INTEGER,
   signature TEXT, is_static INTEGER DEFAULT 0,
+  module TEXT DEFAULT '',
   origin TEXT NOT NULL, confidence REAL NOT NULL,
   metrics TEXT DEFAULT '{}',
   UNIQUE(qname, kind));
@@ -829,7 +830,7 @@ def build(root: str, db_path: str, jobs: int,
     else:
         print("[L5] co_changes skipped — not a git repo(或 git 不可用)")
 
-    con.execute("INSERT INTO meta VALUES ('schema_version','1')")
+    con.execute("INSERT INTO meta VALUES ('schema_version','2')")
     con.execute("INSERT INTO meta VALUES ('root',?)", (root,))
     con.execute("INSERT INTO meta VALUES ('engines_run',?)",
                 (json.dumps([{"engine": "ctags+cscope+heuristics",
@@ -1057,6 +1058,139 @@ def clink_import(root: str, db_path: str,
           f"conf {conf}); dropped(no-src)={n_drop}; "
           f"semantic 註記: confirmed={n_conf}, absent={n_abs}; "
           f"{time.time() - t0:.0f}s")
+
+
+# ---------------------------------------------------------------- #1: viz
+
+CALL_FAMILY = ("calls", "fnptr", "callback")
+ALL_VIZ_KINDS = ("calls", "fnptr", "callback", "expands", "reads", "writes",
+                 "includes", "co_changes")
+VIZ_LINK_COLORS = {"calls": "#607d8b", "fnptr": "#ffb300",
+                   "callback": "#ab47bc", "expands": "#26a69a",
+                   "reads": "#66bb6a", "writes": "#ef5350",
+                   "includes": "#8d6e63", "co_changes": "#78909c"}
+VIZ_NODE_COLORS = {"function": "#4fc3f7", "global": "#66bb6a",
+                   "macro": "#ffa726", "file": "#8d6e63"}
+MODULE_PALETTE = ["#4fc3f7", "#ffb300", "#ab47bc", "#66bb6a", "#ef5350",
+                  "#26a69a", "#8d6e63", "#f06292", "#9ccc65", "#7986cb"]
+
+
+def viz_focus_filter(nodes: list[dict[str, Any]], links: list[dict[str, Any]],
+                     focus: str, depth: int) -> tuple[list[dict[str, Any]],
+                                                      list[dict[str, Any]]]:
+    """無向 BFS 鄰域(ccq focusFilter 血統);focus 可為 name 或 qname。"""
+    adj: dict[str, list[str]] = {}
+    for e in links:
+        adj.setdefault(e["source"], []).append(e["target"])
+        adj.setdefault(e["target"], []).append(e["source"])
+    seeds = [n["id"] for n in nodes
+             if n["id"] == focus or n["id"].endswith("::" + focus)
+             or n["id"].rsplit("::", 1)[-1] == focus]
+    keep = set(seeds)
+    frontier = list(seeds)
+    for _ in range(max(1, depth)):
+        nxt: list[str] = []
+        for nid in frontier:
+            for m in adj.get(nid, []):
+                if m not in keep:
+                    keep.add(m)
+                    nxt.append(m)
+        frontier = nxt
+    for n in nodes:
+        n["focus"] = n["id"] in seeds
+    return ([n for n in nodes if n["id"] in keep],
+            [e for e in links if e["source"] in keep and e["target"] in keep])
+
+
+def viz_cmd(root: str, db: str, fmt: str, focus: str | None, depth: int,
+            out: str | None, full: bool, min_conf: float) -> None:
+    """#1:從 graph.db 匯出單一離線互動 HTML(2d/3d;ccq viz parity)。
+    預設只嵌呼叫家族(calls/fnptr/callback);--full 嵌全部 8 種邊。
+    不索引——沒 artifact 就報錯給正確第一步(P7)。"""
+    if fmt not in ("html3d", "html2d", "3d", "2d"):
+        sys.exit(f"unknown --format {fmt!r} (html3d|html2d)")
+    dim = "3d" if fmt in ("html3d", "3d") else "2d"
+    if not os.path.exists(db):
+        sys.exit(f"ERROR: no graph at {db} — run: ccodegraph.py build -p {root}")
+    # 過舊警告(mtime 快篩;精確判定用 build --incremental)
+    db_m = os.path.getmtime(db)
+    newest = 0.0
+    for p in source_files(root):
+        try:
+            newest = max(newest, os.path.getmtime(os.path.join(root, p)))
+        except OSError:
+            continue
+    if newest > db_m:
+        print("warning: graph is older than the source tree — run "
+              "`build --incremental` first", file=sys.stderr)
+    kinds = ALL_VIZ_KINDS if full else CALL_FAMILY
+    con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+    ph = ",".join("?" * len(kinds))
+    links = [{"source": sq, "target": dq, "kind": k}
+             for sq, dq, k in con.execute(
+                 f"SELECT DISTINCT n1.qname, n2.qname, e.kind FROM edges e "
+                 f"JOIN nodes n1 ON n1.id=e.src JOIN nodes n2 ON n2.id=e.dst "
+                 f"WHERE e.kind IN ({ph}) AND e.confidence >= ?",
+                 (*kinds, min_conf))]
+    used = {x for e in links for x in (e["source"], e["target"])}
+    have_module = any(r[1] == "module"
+                      for r in con.execute("PRAGMA table_info(nodes)"))
+    if not have_module:
+        print("note: graph is schema v1(無 module 欄)— 重跑 build 可升級",
+              file=sys.stderr)
+    msel = "COALESCE(module,'')" if have_module else "''"
+    mods: dict[str, str] = {}
+    nodes = []
+    for qn, kind, nfile, line, module in con.execute(
+            f"SELECT qname, kind, file, line_start, {msel} FROM nodes"):
+        if qn not in used:
+            continue
+        color = VIZ_NODE_COLORS.get(kind, "#b0bec5")
+        if module:
+            if module not in mods:
+                mods[module] = MODULE_PALETTE[len(mods) % len(MODULE_PALETTE)]
+            color = mods[module]        # module 分群(視覺):同 module 同色
+        nodes.append({"id": qn, "kind": kind, "file": nfile, "line": line,
+                      "module": module, "color": color, "focus": False})
+    con.close()
+    if focus:
+        nodes, links = viz_focus_filter(nodes, links, focus, depth)
+        if not nodes:
+            sys.exit(f'ERROR: focus symbol "{focus}" not in the embedded '
+                     f'edge kinds({",".join(kinds)})')
+    adir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
+    lib = os.path.join(adir, "fg2d.js" if dim == "2d" else "tfg3d.js")
+    tpl = os.path.join(adir, "viz_template.html")
+    try:
+        with open(lib) as fh:
+            libjs = fh.read()
+        with open(tpl) as fh:
+            template = fh.read()
+    except OSError as e:
+        sys.exit(f"ERROR: viz asset missing: {e}")
+    cbs = []
+    for k in kinds:
+        chk = " checked" if k in CALL_FAMILY else ""
+        cbs.append(f'<label><input type="checkbox" class="fk" '
+                   f'data-kind="{k}"{chk}> <span class="sw" '
+                   f'style="background:{VIZ_LINK_COLORS[k]}"></span>{k}</label>')
+    data = json.dumps({"nodes": nodes, "links": links,
+                       "focus": focus or ""}, ensure_ascii=False)
+    h = template
+    h = h.replace("__DIM__", dim.upper())
+    h = h.replace("__CTOR__", "ForceGraph" if dim == "2d" else "ForceGraph3D")
+    h = h.replace("__KINDCB__", "\n ".join(cbs))
+    h = h.replace("__LINKCOLORS__", json.dumps(VIZ_LINK_COLORS))
+    h = h.replace("__LIB__", libjs)
+    h = h.replace("__DATA__", data)
+    dest = out or os.path.join(root, PRODUCTS_DIR, f"graph-{dim}.html")
+    os.makedirs(os.path.dirname(dest), exist_ok=True)
+    with open(dest, "w") as fh:
+        fh.write(h)
+    print(f"wrote {dest}: {len(nodes)} nodes, {len(links)} edges "
+          f"(kinds: {','.join(kinds)}{'' if full else '; add --full for all'})")
+
+
 
 
 # ---------------------------------------------------------------- 查詢動詞
@@ -1378,7 +1512,7 @@ def reset_cmd(root: str) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("verb", choices=["build", "clink-import", "schema", "skill",
-                                     "status", "reset",
+                                     "status", "reset", "viz",
                                      "explore", "callers", "callees",
                                      "impact", "globals", "vars-of",
                                      "who-includes", "co-changed", "sql"])
@@ -1396,6 +1530,12 @@ def main() -> None:
                     "檔案層級合併(D12;順序=優先權)")
     ap.add_argument("--ambiguous", action="store_true",
                     help="impact 也走 ambiguous 邊(D4 預設不走)")
+    ap.add_argument("--format", default="html3d",
+                    help="viz:html3d(預設)|html2d")
+    ap.add_argument("--focus", help="viz:BFS 聚焦符號(name 或 qname)")
+    ap.add_argument("--out", help="viz:輸出檔(預設 .ccodegraph/graph-<dim>.html)")
+    ap.add_argument("--full", action="store_true",
+                    help="viz:嵌入全部 8 種邊(預設只嵌呼叫家族)")
     ap.add_argument("--json", action="store_true",
                     help="FR9:輸出 JSON(與文字欄位一一對應),LLM 自選格式")
     a = ap.parse_args()
@@ -1424,6 +1564,9 @@ def main() -> None:
         return None
     if a.verb == "reset":
         return reset_cmd(root)
+    if a.verb == "viz":
+        return viz_cmd(root, db, a.format, a.focus, a.depth, a.out,
+                       a.full, a.min_conf)
     if not os.path.exists(db):
         sys.exit(f"ERROR: no graph at {db} — run: ccodegraph.py build -p {root}")
     if a.verb not in ("schema",) and not a.arg:

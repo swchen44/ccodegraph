@@ -1,0 +1,97 @@
+<!doctype html><html><head><meta charset="utf-8">
+<title>ccodegraph __DIM__</title>
+<style>
+ html,body{margin:0;height:100%;background:#0b0f14;color:#cfd8dc;font:13px/1.5 -apple-system,system-ui,sans-serif;overflow:hidden}
+ #graph{position:absolute;inset:0}
+ .card{position:absolute;background:#141a22ee;border:1px solid #263238;border-radius:8px;padding:10px 12px;box-sizing:border-box}
+ #ctl{top:10px;left:10px;width:270px}
+ #panel{top:0;right:0;width:290px;max-height:100vh;overflow:auto;border-radius:0;border-left:1px solid #263238;background:#141a22f2}
+ #ctl h3{margin:0 0 6px;font-size:13px;color:#eceff1}
+ #ctl label{display:block;margin:3px 0}
+ #ctl input[type=text]{width:150px;background:#0b0f14;border:1px solid #37474f;color:#cfd8dc;border-radius:4px;padding:3px 6px}
+ #ctl input.bad{border-color:#e53935}
+ select{background:#0b0f14;border:1px solid #37474f;color:#cfd8dc;border-radius:4px;padding:2px}
+ .sw{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:middle}
+ button{background:#1e2933;border:1px solid #37474f;color:#cfd8dc;border-radius:5px;padding:4px 8px;cursor:pointer;margin:2px 2px 0 0}
+ button:hover{background:#263440}
+ #panel h2{margin:10px 0 4px;font-size:13px;color:#4fc3f7}
+ .mono{font-family:ui-monospace,Menlo,monospace}
+ #count{color:#78909c;margin-top:6px}
+ hr{border:0;border-top:1px solid #263238;margin:8px 0}
+</style></head><body>
+<div id="graph"></div>
+<div id="ctl" class="card">
+ <h3>ccodegraph &middot; __DIM__</h3>
+ __KINDCB__
+ <hr>
+ <label>allow <input type="text" id="allow" placeholder="(empty = all)">
+   <select id="allowMode"><option value="plain">plain</option><option value="regex">regex</option></select></label>
+ <label>deny&nbsp; <input type="text" id="deny" placeholder="(empty = none)">
+   <select id="denyMode"><option value="plain">plain</option><option value="regex">regex</option></select></label>
+ <label>search <input type="text" id="q" placeholder="highlight&hellip;"></label>
+ <hr>
+ <label>min degree <input type="number" id="minDeg" value="1" min="0" style="width:56px"></label>
+ <label>max nodes&nbsp; <input type="number" id="maxN" value="2000" min="50" step="100" style="width:70px"> <span style="color:#78909c">(top by degree)</span></label>
+ <hr>
+ <div><button id="dlJson">download JSON</button><button id="dlNodes">nodes.csv</button><button id="dlEdges">edges.csv</button></div>
+ <div id="count"></div>
+</div>
+<div id="panel" class="card"><h2>node detail</h2><div id="pbody" style="color:#78909c">Click a node for its neighbours.</div></div>
+<script>__LIB__</script>
+<script>
+const DATA = __DATA__;
+const LINKCOLORS = __LINKCOLORS__;
+const G = __CTOR__()(document.getElementById('graph'))
+  .backgroundColor('#0b0f14')
+  .nodeLabel(n=>`${n.id}  [${n.kind}]${n.module?` (${n.module})`:''}${n.file?`\n${n.file}:${n.line}`:''}`)
+  .nodeColor(n=> n.hl?'#fff176' : n.focus?'#ff5252': n.color)
+  .nodeVal(n=> n.focus?9:3)
+  .linkColor(l=> LINKCOLORS[l.kind]||'#607d8b')
+  .linkDirectionalArrowLength(3).linkDirectionalArrowRelPos(1)
+  .linkDirectionalParticles(l=> l.kind==='fnptr'?2:0)
+  .onNodeClick(n=>{
+    const ins=DATA.links.filter(l=>(l.target.id||l.target)===n.id).map(l=>(l.source.id||l.source)+' ['+l.kind+']');
+    const outs=DATA.links.filter(l=>(l.source.id||l.source)===n.id).map(l=>(l.target.id||l.target)+' ['+l.kind+']');
+    document.getElementById('pbody').innerHTML=
+      `<div class="mono" style="color:#eceff1;font-size:14px">${n.id}</div>`+
+      `<div style="color:#78909c">[${n.kind}]${n.module?` &middot; ${n.module}`:''}${n.file?` &middot; ${n.file}:${n.line}`:''}</div>`+
+      `<h2>in (${ins.length})</h2>`+ins.slice(0,80).map(x=>`<div class="mono">${x}</div>`).join('')+
+      `<h2>out (${outs.length})</h2>`+outs.slice(0,80).map(x=>`<div class="mono">${x}</div>`).join('');
+  });
+
+function matcher(pat, mode, el){
+  el.classList.remove('bad');
+  if(!pat) return null;
+  if(mode==='regex'){ try{ const re=new RegExp(pat,'i'); return s=>re.test(s);}catch(e){ el.classList.add('bad'); return null; } }
+  const p=pat.toLowerCase(); return s=>s.toLowerCase().includes(p);
+}
+function apply(){
+  const enabled=new Set([...document.querySelectorAll('.fk')].filter(e=>e.checked).map(e=>e.dataset.kind));
+  const allow=matcher(document.getElementById('allow').value.trim(),document.getElementById('allowMode').value,document.getElementById('allow'));
+  const deny =matcher(document.getElementById('deny').value.trim(), document.getElementById('denyMode').value, document.getElementById('deny'));
+  const q=document.getElementById('q').value.trim().toLowerCase();
+  const minDeg=+document.getElementById('minDeg').value||0, maxN=+document.getElementById('maxN').value||1e9;
+  const nodeOK=n=> (n.focus) || ((!allow||allow(n.id)) && !(deny&&deny(n.id)));
+  DATA.nodes.forEach(n=> n.hl = q && n.id.toLowerCase().includes(q));
+  let keep=new Set(DATA.nodes.filter(nodeOK).map(n=>n.id));
+  let links=DATA.links.filter(l=> enabled.has(l.kind) && keep.has(l.source.id||l.source) && keep.has(l.target.id||l.target));
+  const deg={}; links.forEach(l=>{const a=l.source.id||l.source,b=l.target.id||l.target;deg[a]=(deg[a]||0)+1;deg[b]=(deg[b]||0)+1;});
+  keep=new Set(DATA.nodes.filter(n=> n.focus || (deg[n.id]||0)>=minDeg).map(n=>n.id));
+  let kept=[...keep];
+  if(kept.length>maxN){ kept.sort((a,b)=>(deg[b]||0)-(deg[a]||0)); keep=new Set(kept.slice(0,maxN)); }
+  links=links.filter(l=> keep.has(l.source.id||l.source) && keep.has(l.target.id||l.target));
+  const nodes=DATA.nodes.filter(n=> keep.has(n.id));
+  G.graphData({nodes,links});
+  document.getElementById('count').textContent=`showing ${nodes.length} / ${DATA.nodes.length} nodes · ${links.length} / ${DATA.links.length} edges`;
+}
+[...document.querySelectorAll('.fk')].forEach(e=>e.onchange=apply);
+['allowMode','denyMode'].forEach(id=>document.getElementById(id).onchange=apply);
+['allow','deny','q','minDeg','maxN'].forEach(id=>document.getElementById(id).oninput=apply);
+
+function dl(name, text, type){ const b=new Blob([text],{type}); const a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download=name; a.click(); }
+function csv(rows){ return rows.map(r=>r.map(v=>`"${String(v).replace(/"/g,'""')}"`).join(',')).join('\n'); }
+document.getElementById('dlJson').onclick=()=>dl('ccodegraph.json', JSON.stringify({nodes:DATA.nodes.map(n=>({name:n.id,kind:n.kind,module:n.module,file:n.file,line:n.line})),edges:DATA.links.map(l=>({src:l.source.id||l.source,dst:l.target.id||l.target,kind:l.kind}))},null,1),'application/json');
+document.getElementById('dlNodes').onclick=()=>dl('nodes.csv', csv([['name','kind','module','file','line'],...DATA.nodes.map(n=>[n.id,n.kind,n.module,n.file,n.line])]),'text/csv');
+document.getElementById('dlEdges').onclick=()=>dl('edges.csv', csv([['src','dst','kind'],...DATA.links.map(l=>[l.source.id||l.source,l.target.id||l.target,l.kind])]),'text/csv');
+apply();
+</script></body></html>

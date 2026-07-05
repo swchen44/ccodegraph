@@ -243,6 +243,33 @@ class TestCLI(unittest.TestCase):
         self.assertFalse(os.path.exists(os.path.join(root2, ".ccodegraph")))
         sh.rmtree(tmp2)
 
+    def test_viz_3d_default(self):
+        out = self.run_cli("viz")
+        self.assertIn("wrote", out)
+        p = os.path.join(self.root, ".ccodegraph", "graph-3d.html")
+        with open(p) as fh:
+            html = fh.read()
+        self.assertIn("ForceGraph3D", html)
+        self.assertIn("sort_things", html)
+        self.assertIn('"module"', html)          # #1:module 屬性已入資料
+        self.assertNotIn('"kind": "reads"', html)  # 預設不嵌 reads
+
+    def test_viz_2d_focus_and_full(self):
+        out = self.run_cli("viz", "--format", "html2d", "--focus", "cmp",
+                           "-d", "1")
+        self.assertIn("2 nodes", out)
+        out2 = self.run_cli("viz", "--full", "--out",
+                            os.path.join(self.root, ".ccodegraph", "f.html"))
+        self.assertIn("reads", out2)             # kinds 清單含 reads
+
+    def test_viz_without_graph_errors_helpfully(self):
+        tmp2 = tempfile.mkdtemp()
+        r = subprocess.run([sys.executable, CLI, "viz", "-p", tmp2],
+                           capture_output=True, text=True)
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn("build", r.stdout + r.stderr)
+        shutil.rmtree(tmp2)
+
     def test_sql_escape_hatch(self):
         out = self.run_cli("sql", "SELECT COUNT(*) FROM nodes")
         self.assertGreater(int(out.strip()), 5)
