@@ -2,7 +2,7 @@
 
 int counter = 0;
 
-int add(int a, int b) { return a + b; }
+int add(int a, int b) { return MAX2(a, a + b); }
 
 static int helper(void) { return 1; }
 

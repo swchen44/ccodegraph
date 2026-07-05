@@ -136,6 +136,10 @@ class TestCLI(unittest.TestCase):
             with open(fp, "w") as fh:
                 fh.write(content.rstrip() + "\n")
 
+    def test_macro_callers(self):
+        out = self.run_cli("callers", "MAX2")
+        self.assertIn("add", out)
+
     def test_sql_escape_hatch(self):
         out = self.run_cli("sql", "SELECT COUNT(*) FROM nodes")
         self.assertGreater(int(out.strip()), 5)

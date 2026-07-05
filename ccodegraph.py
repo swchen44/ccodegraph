@@ -53,7 +53,6 @@ CONFIDENCE: dict[str, float] = {
 
 # schema 動詞回報「格子還空著」用(design.md §5 填料計畫)
 PENDING_LAYERS: list[tuple[str, str]] = [
-    ("treesitter", "L2: calls 聯集補充、K&R defs"),
     ("fnptr", "L3: ops/vtable 分派邊 + manual 表"),
     ("callback", "L3: fn-as-argument 邊"),
     ("clink", "R7a: libclang 解析期歸戶 calls + 語意 writes(選配,需 clink binary)"),
@@ -303,7 +302,7 @@ def ctags_defs(root: str) -> list[Def]:
     """L0:ctags JSON → 節點原料。kind: function|global(ctags f/v);
     static 用定義行文字偵測(近似,documented)。"""
     out = run_checked(["ctags", "-R", "--languages=C,C++",
-                       "--kinds-C=f,v", "--kinds-C++=f,v",
+                       "--kinds-C=f,v,d", "--kinds-C++=f,v,d",
                        "--fields=+ne", "--output-format=json", "."], root)
     src_cache: dict[str, list[str]] = {}
     defs: list[Def] = []
@@ -322,7 +321,8 @@ def ctags_defs(root: str) -> list[Def]:
                     src_cache[path] = f.read().splitlines()
             except OSError:
                 src_cache[path] = []
-        kind = {"function": "function", "variable": "global"}.get(o.get("kind", ""))
+        kind = {"function": "function", "variable": "global",
+                "macro": "macro"}.get(o.get("kind", ""))
         if not kind:
             continue
         defs.append({
@@ -492,7 +492,9 @@ def build(root: str, db_path: str, jobs: int) -> None:
     srcs = source_files(root)
     n_fn = sum(1 for d in defs if d["kind"] == "function")
     n_gv = sum(1 for d in defs if d["kind"] == "global")
-    print(f"     {n_fn} functions, {n_gv} globals, {len(srcs)} files")
+    n_mc = sum(1 for d in defs if d["kind"] == "macro")
+    print(f"     {n_fn} functions, {n_gv} globals, {n_mc} macros, "
+          f"{len(srcs)} files")
 
     # 原子性重建(codex 高風險 1):寫 temp,成功才 os.replace
     tmp_db = db_path + ".building"
@@ -520,9 +522,11 @@ def build(root: str, db_path: str, jobs: int) -> None:
 
     fn_index: dict[str, list[Def]] = {}
     gv_index: dict[str, list[Def]] = {}
+    mc_index: dict[str, list[Def]] = {}
     for d in defs:
-        (fn_index if d["kind"] == "function" else gv_index) \
-            .setdefault(d["name"], []).append(d)
+        idx = {"function": fn_index, "global": gv_index,
+               "macro": mc_index}[str(d["kind"])]
+        idx.setdefault(d["name"], []).append(d)
 
     def add_edge(src_id: int, dst_id: int, kind: str, file: str, line: int,
                  origin: str, meta: str = "{}") -> None:
@@ -585,6 +589,23 @@ def build(root: str, db_path: str, jobs: int) -> None:
                         for dst in viable:
                             add_edge(src["id"], dst["id"], other_kind, f, ln,
                                      "cscope", rmeta)
+        # expands:函式 → 函式型巨集(L2';cscope 把巨集使用當呼叫報,
+        # -dL3 <macro> 的歸戶與 calls 相同)。D11:tree-sitter 層除役後
+        # 真正的缺口是這個維度(wpa 實測 586 個被呼叫的巨集)。
+        mc_names = sorted(mc_index)
+        users_of = ex.map(lambda n: cscope_lines(root, "3", n), mc_names)
+        for name, rows in zip(mc_names, users_of, strict=True):
+            for user, f, ln, _txt in rows:
+                if user in ("<global>", "<unknown>"):
+                    continue
+                src = attribute_src(fn_index, user, f, ln)
+                if not src:
+                    continue
+                viable = choose_dst(mc_index[name], f)
+                meta = edge_meta(len(viable))
+                for dst in viable:
+                    add_edge(src["id"], dst["id"], "expands", f, ln,
+                             "cscope", meta)
         # includes:file → file;#include 內容與 header 路徑比對
         # (重名 header 防錯連,codex 高風險 4)
         includers = ex.map(
@@ -758,9 +779,9 @@ def node_candidates(con: sqlite3.Connection, sym: str,
 def sectioned(con: sqlite3.Connection, sym: str, direction: str,
               min_conf: float) -> None:
     """callers/callees:同名多定義 → 分節(D1);ambiguous 邊照 D4 顯示 + 標籤。"""
-    cands = node_candidates(con, sym, ["function"])
+    cands = node_candidates(con, sym, ["function", "macro"])
     if not cands:
-        print(f'symbol "{sym}" not found (kind=function)')
+        print(f'symbol "{sym}" not found (kind=function|macro)')
         return
     if len(cands) > 1:
         print(f"{('callers' if direction == 'dst' else 'callees')} of {sym} "
@@ -775,7 +796,7 @@ def sectioned(con: sqlite3.Connection, sym: str, direction: str,
             f" AND e.{other}=p.{other} AND e.kind=p.kind LIMIT 1) "
             f"FROM edge_pairs p JOIN nodes n ON n.id=p.{other} "
             f"WHERE p.{direction}=? AND p.kind IN "
-            f"('calls','fnptr','callback') AND p.confidence >= ? "
+            f"('calls','fnptr','callback','expands') AND p.confidence >= ? "
             f"ORDER BY n.qname", (cid, min_conf)).fetchall()
         if not rows:
             print("- (none)")

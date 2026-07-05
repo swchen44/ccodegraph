@@ -197,6 +197,14 @@ class TestBuildMiniproj(unittest.TestCase):
             ro.execute("DELETE FROM edges")
         ro.close()
 
+    # ---- L2' macro 維度 ----
+
+    def test_macro_node_and_expands_edge(self):
+        kind = self.con.execute(
+            "SELECT kind FROM nodes WHERE name='MAX2'").fetchone()
+        self.assertEqual(kind[0], "macro")
+        self.assertIn(("add", "MAX2"), self.pairs("expands"))
+
     # ---- views / meta ----
 
     def test_edge_pairs_view_aggregates(self):
