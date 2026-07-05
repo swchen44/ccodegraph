@@ -14,13 +14,37 @@
 ## 快速開始
 
 ```bash
-# 依賴:python3(標準庫)、universal-ctags、cscope;選配:clink
-./ccodegraph.py build -p <repo>            # 零 build,~90s / 600 檔 → <repo>/.ccodegraph/graph.db
-./ccodegraph.py clink-import -p <repo>     # 選配:語意層(自動偵測/合併/合成 compile DB)
+# 依賴:python3(標準庫)、universal-ctags、cscope;選配:clink、git
+# 建索引順序(固定兩步):
+./ccodegraph.py build -p <repo>            # step 1(必要):文字層,零 build,~90s / 600 檔
+./ccodegraph.py clink-import -p <repo>     # step 2(選配):語意層 → semantic 註記
 ./ccodegraph.py explore some_function -p <repo>    # 頭牌動詞:定義+callers+callees+全域讀寫,一發
 ./ccodegraph.py schema -p <repo>           # 第一動詞:格子、填充率、出處、STALE 警告
-# 改碼之後:
+# 改碼之後(同樣兩步、同樣順序):
 ./ccodegraph.py build --incremental -p <repo>      # 改 1 檔 ≈ 4s,與全量重建 diff = 0
+./ccodegraph.py clink-import -p <repo>     # 直接重跑即是增量:clink 內建每檔 hash,
+                                           # 只重解析變更檔;compile-DB 模式變更才自動全重解析
+```
+
+### compile DB:多份合併與合成(語意層的精度階梯)
+
+```bash
+# 使用者有多份 compile_commands.json(一包原始碼 build 三個執行檔的常態):
+./ccodegraph.py clink-import --compdb build1.json,build2.json,build3.json -p <repo>
+#   → 檔案層級合併:同檔取第一份提到它的規則(順序=優先權)、各 target 獨有檔聯集全收、
+#     規則衝突逐筆回報;信心 0.95
+# 只有一份:放 repo root 或 build/ 會自動偵測(0.95)
+# 一份都沒有(no-build):自動合成(-I 蓋全部 header 目錄、刻意不猜 -D;0.93)
+```
+
+### 工具路徑(環境變數 > 系統 PATH)
+
+```bash
+export CCODEGRAPH_CTAGS_PATH=/path/to/ctags     # 未設定就用系統 PATH 搜尋
+export CCODEGRAPH_CSCOPE_PATH=/path/to/cscope
+export CCODEGRAPH_CLINK_PATH=/path/to/clink     # (舊名 CCODEGRAPH_CLINK 仍相容)
+export CCODEGRAPH_GIT_PATH=/path/to/git
+# 註:沒有 libclang 變數——我們不直接呼叫 libclang,它是 clink 建置期連結進去的
 ```
 
 所有查詢動詞支援 `--json`(欄位與文字一一對應,由 LLM 自選格式)。

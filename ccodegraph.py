@@ -300,12 +300,20 @@ def classify_ctags(version_output: str) -> str:
 
 def require_universal_ctags() -> None:
     try:
-        r = subprocess.run(["ctags", "--version"], capture_output=True, text=True)
+        r = subprocess.run([tool_path("ctags"), "--version"],
+                           capture_output=True, text=True)
     except FileNotFoundError:
         sys.exit(CTAGS_INSTALL_HINTS.format(flavor="not installed"))
     flavor = classify_ctags(r.stdout + r.stderr)
     if flavor != "universal":
         sys.exit(CTAGS_INSTALL_HINTS.format(flavor=flavor))
+
+
+def tool_path(name: str) -> str:
+    """工具路徑解析(#3):CCODEGRAPH_<NAME>_PATH 環境變數優先,未設定
+    直接吃系統 PATH。例:CCODEGRAPH_CSCOPE_PATH=/opt/bin/cscope。
+    (libclang 不在此列:我們不直接呼叫它,它是 clink 建置期連結的。)"""
+    return os.environ.get(f"CCODEGRAPH_{name.upper()}_PATH", name)
 
 
 def run_checked(cmd: list[str], cwd: str) -> str:
@@ -321,7 +329,7 @@ def cscope_lines(root: str, qflag: str, sym: str) -> list[CscopeRow]:
     """cscope -d -f <專用索引> -L<q> sym → [(field2, file, line, text)]。"""
     out: list[CscopeRow] = []
     raw_out = run_checked(
-        ["cscope", "-d", "-f", CSCOPE_DB, "-L" + qflag, sym], root)
+        [tool_path("cscope"), "-d", "-f", CSCOPE_DB, "-L" + qflag, sym], root)
     for raw in raw_out.splitlines():
         p = raw.split(None, 3)
         if len(p) >= 3 and p[2].isdigit():
@@ -332,7 +340,7 @@ def cscope_lines(root: str, qflag: str, sym: str) -> list[CscopeRow]:
 def ctags_defs(root: str) -> list[Def]:
     """L0:ctags JSON → 節點原料。kind: function|global(ctags f/v);
     static 用定義行文字偵測(近似,documented)。"""
-    out = run_checked(["ctags", "-R", "--languages=C,C++",
+    out = run_checked([tool_path("ctags"), "-R", "--languages=C,C++",
                        "--kinds-C=f,v,d", "--kinds-C++=f,v,d",
                        "--fields=+neS", "--output-format=json", "."], root)
     src_cache: dict[str, list[str]] = {}
@@ -377,7 +385,7 @@ def source_files(root: str) -> list[str]:
 
 def git_head(root: str) -> str | None:
     try:
-        r = subprocess.run(["git", "-C", root, "rev-parse", "HEAD"],
+        r = subprocess.run([tool_path("git"), "-C", root, "rev-parse", "HEAD"],
                            capture_output=True, text=True)
     except FileNotFoundError:
         return None
@@ -388,7 +396,7 @@ def git_co_change_groups(root: str, known: set[str],
                          window: int = 500) -> list[list[str]]:
     try:
         r = subprocess.run(
-            ["git", "-C", root, "log", "--name-only",
+            [tool_path("git"), "-C", root, "log", "--name-only",
              "--pretty=format:%H", "-n", str(window)],
             capture_output=True, text=True)
     except FileNotFoundError:
@@ -543,10 +551,11 @@ def build(root: str, db_path: str, jobs: int,
           incremental: bool = False) -> None:
     require_universal_ctags()          # R2:flavor 偵測,非 Universal 大聲死
     try:
-        subprocess.run(["cscope", "--version"], capture_output=True)
+        subprocess.run([tool_path("cscope"), "--version"], capture_output=True)
     except FileNotFoundError:
-        sys.exit("ERROR: cscope not found — L1 需要它(NFR1)。"
-                 "macOS: brew install cscope / Linux: apt install cscope")
+        sys.exit(f"ERROR: cscope not found({tool_path('cscope')})— L1 需要它。"
+                 "macOS: brew install cscope / Linux: apt install cscope;"
+                 "或設 CCODEGRAPH_CSCOPE_PATH=/path/to/cscope")
     t0 = time.time()
     pdir = os.path.join(root, PRODUCTS_DIR)
     os.makedirs(pdir, exist_ok=True)
@@ -601,7 +610,7 @@ def build(root: str, db_path: str, jobs: int,
                             or any(include_matches(sp, h) for sp in specs))}
 
     print("[L0] cscope index + ctags 節點 …")
-    run_checked(["cscope", "-bkR", "-f", CSCOPE_DB], root)
+    run_checked([tool_path("cscope"), "-bkR", "-f", CSCOPE_DB], root)
     defs = assign_qnames(ctags_defs(root))
     if incremental:
         # 定義真的變了的名字:舊圖在 touched|deleted 的定義 + 新解析在 touched 的定義
@@ -895,7 +904,8 @@ def synthesize_compile_db(root: str, srcs: list[str]) -> list[dict[str, Any]]:
 
 # ---------------------------------------------------------------- R7a: clink 匯入
 
-CLINK_BIN = os.environ.get("CCODEGRAPH_CLINK", "clink")
+CLINK_BIN = os.environ.get("CCODEGRAPH_CLINK_PATH",
+                           os.environ.get("CCODEGRAPH_CLINK", "clink"))
 
 
 def load_graph_indexes(con: sqlite3.Connection) -> tuple[dict[str, list[Def]],
@@ -928,8 +938,6 @@ def clink_import(root: str, db_path: str,
                  "或設 CCODEGRAPH_CLINK=/path/to/clink")
     t0 = time.time()
     cdb = os.path.join(root, PRODUCTS_DIR, "clink.db")
-    if os.path.exists(cdb):
-        os.remove(cdb)
     # L4/D12 compile DB 階梯:--compdb 合併 → root/build 偵測 → 合成(ccq 血統)
     pdir = os.path.join(root, PRODUCTS_DIR)
     cc_dir = None
@@ -965,7 +973,21 @@ def clink_import(root: str, db_path: str,
             cc_dir = pdir
             conf = CONFIDENCE["clink"]
             mode = f"synthesized({len(entries)} entries;無真實 -D,單 config 盲點仍在)"
-    print(f"[R7a/L4] clink -b(libclang,{mode},conf {conf})…")
+    # 增量語意(#6):clink 自帶每檔 hash 增量——保留 clink.db,重跑
+    # clink-import 時它只重解析變更檔;compile-DB 模式變更才全重解析。
+    mode_file = os.path.join(pdir, "clink_mode.txt")
+    prev_mode = None
+    if os.path.exists(mode_file):
+        with open(mode_file) as fh:
+            prev_mode = fh.read().strip()
+    if prev_mode is not None and prev_mode != mode and os.path.exists(cdb):
+        print(f"[R7a/L4] compile-DB 模式變更({prev_mode} → {mode})— "
+              f"清 clink.db 全重解析")
+        os.remove(cdb)
+    with open(mode_file, "w") as fh:
+        fh.write(mode)
+    print(f"[R7a/L4] clink -b(libclang,{mode},conf {conf};"
+          f"{'增量' if os.path.exists(cdb) else '全量'})…")
     cmd = [CLINK_BIN, "-b", "--database", cdb]
     if cc_dir:
         cmd += ["--compile-commands", cc_dir]

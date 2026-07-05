@@ -352,5 +352,18 @@ class TestCoChangePairs(unittest.TestCase):
         self.assertEqual(ig.co_change_groups_to_pairs(groups, cap=20), [])
 
 
+class TestToolPath(unittest.TestCase):
+    def test_env_override(self):
+        import os
+        os.environ["CCODEGRAPH_CSCOPE_PATH"] = "/opt/x/cscope"
+        try:
+            self.assertEqual(ig.tool_path("cscope"), "/opt/x/cscope")
+        finally:
+            del os.environ["CCODEGRAPH_CSCOPE_PATH"]
+
+    def test_default_system_path(self):
+        self.assertEqual(ig.tool_path("ctags"), "ctags")
+
+
 if __name__ == "__main__":
     unittest.main()
