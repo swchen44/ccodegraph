@@ -187,6 +187,15 @@ class TestCLI(unittest.TestCase):
         self.assertTrue(d["callees"])
         self.assertTrue(any(g["access"] == "writes" for g in d["globals"]))
 
+    def test_skill_verb_prints_risk_chapter(self):
+        r = subprocess.run([sys.executable, CLI, "skill"],
+                           capture_output=True, text=True)
+        assert r.returncode == 0, r.stderr
+        self.assertIn("RISK CHAPTER", r.stdout)
+        self.assertIn("semantic: confirmed | absent", r.stdout)
+        self.assertIn("ambiguous N candidates", r.stdout)
+        self.assertIn("asserted_by_user", r.stdout)
+
     def test_sql_escape_hatch(self):
         out = self.run_cli("sql", "SELECT COUNT(*) FROM nodes")
         self.assertGreater(int(out.strip()), 5)

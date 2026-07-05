@@ -1237,7 +1237,7 @@ def render_schema(res: dict[str, Any]) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("verb", choices=["build", "clink-import", "schema",
+    ap.add_argument("verb", choices=["build", "clink-import", "schema", "skill",
                                      "explore", "callers", "callees",
                                      "impact", "globals", "vars-of",
                                      "who-includes", "co-changed", "sql"])
@@ -1260,6 +1260,15 @@ def main() -> None:
     root = os.path.abspath(a.root)
     db = a.db or os.path.join(root, DB_NAME)
 
+    if a.verb == "skill":
+        p = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                         "skills", "ccodegraph", "SKILL.md")
+        try:
+            with open(p) as fh:
+                print(fh.read(), end="")
+        except OSError:
+            sys.exit(f"ERROR: SKILL.md not found at {p}")
+        return None
     if a.verb == "build":
         return build(root, db, a.jobs, a.incremental)
     if a.verb == "clink-import":
