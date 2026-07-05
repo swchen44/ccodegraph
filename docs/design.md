@@ -87,12 +87,18 @@ CREATE VIEW file_deps AS
 
 ## 1.5 Schema Contract(合法值全列——LLM 只讀本節就會用;版本 1)
 
-**nodes.kind(封閉集合,v1)**:`function` | `global`(檔案層級變數)| `macro`(函式型/物件型巨集,ctags d)| `file`。
+**schema_version = 2**(v2 新增 nodes.module;v1 圖可讀,viz 降級提示升級)
+
+**nodes.kind(封閉集合,v2)**:`function` | `global`(檔案層級變數)| `macro`(函式型/物件型巨集,ctags d)| `file`。
 保留字(schema 已容納、填料未做):`struct` `union` `enum` `enum_member` `typedef`。
 C++ 補充(W3 輕量策略,L2+ 才填):`class` `method` `namespace` 以 best-effort 進 `function`/
 `global` 同構欄位,origin 標注來源,不做 overload 消歧(qname 衝突走 `:line` 尾碼)。
 
-**edges.kind(封閉集合,v1)**:`calls` `callback` `fnptr` `reads` `writes` `includes` `expands`(函式→巨集使用)。
+**nodes.module(TEXT,v2 新增)**:模組名——目前恆為空字串(保留欄);
+未來 `module_mapping.csv`(欄 1 = regex、欄 2 = module,檔名符合即歸屬)在 build 時填入;
+viz 以同 module 同色分群(R8)。
+
+**edges.kind(封閉集合,v2)**:`calls` `callback` `fnptr` `reads` `writes` `includes` `expands`(函式→巨集使用)。
 保留字:`uses_type` `co_changes`。
 
 **origin(開放註冊表——新工具只加一行,不改 schema;D7)**:
@@ -376,6 +382,8 @@ vs 使用者原話「查詢層等 DB 完整後」)。測試缺口 T1-T8 入 road
 | L5 | git 層:hash 增量 + co_changes | ✅ 2026-07-05 | **wpa 改 1 檔 3.92s(全量 95s,24x)、normalized diff = 0、up-to-date 3.8s**;邊帶 qname 搬運(semantic 註記不丟);踢除規則 = 站點 in touched ∨ 端點定義變更(src 被踢 → dst 名補進重掃集——wpa 136 邊漂移的修正);co_changes 邊 origin=git conf 0.5 |
 | R4 | 查詢層設計 | 🔶 設計完成;實作 1/4 ✅ 2026-07-05 | [query-layer-design.md](query-layer-design.md);已交付:`explore` + 全動詞 `--json`(FR9)+ clink user_version gate + **SKILL.md v2(風險章,經 codex 第三輪陌生-agent 實測後全面補強:輸出範例、錯誤對照表、co-changed 門檻特例、semantic:absent 措辭校準、遞移 include SQL 模板)** + `skill` 動詞。**R4 完成 4/4**:真 LLM A/B(N=1 先導)= token 打平、正確性 5/5 vs 3/5,W1「靜默答錯」主張獲實證;[research/llm-ab.md](research/llm-ab.md) |
 | R5 | VS Code plugin(友善 UI 讀同一份 graph.db) | ⬜ 最後 | 應用層;DB 是唯一事實來源,plugin 只是另一個 reader |
+| #1-#8 | 使用者 2026-07-06 批次:viz(2d/3d/focus/--full)✅、--compdb 文件化 ✅、工具路徑 env vars ✅、status+reset ✅、clink-import 增量語意 ✅、impact 仿 CodeGraph(affects N + by-file,預設 2)✅、A/B 行為分析 ✅ | ✅ 2026-07-06 | |
+| R8 | module_mapping.csv(regex → module,build 時填 nodes.module;viz 分群強化) | ⬜ TODO(使用者拍板) | schema 欄位已就位(v2) |
 | R6 | Rust 移植研究(傳聞 10x;等功能完整 + schema 穩定) | ⬜ 研究項 | D8:合約不動,引擎可換 |
 | R7 | clink 研究:clone 實跑、萃取改良點 | ✅ 2026-07-05 | [research/clink.md](research/clink.md):六洞察 + 實跑數據 |
 | R7a | clink 匯入器(`clink-import` 動詞,origin=clink conf 0.93) | ✅ 2026-07-05 | wpa:+71403 calls/+215 writes/5s;GT 28/28 不退;**315 對 cscope 漏的 calls(巨集展開)**;層可重跑;選配(缺 clink 明講) |

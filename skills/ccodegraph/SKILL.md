@@ -18,7 +18,12 @@ ccodegraph.py build -p <root>            # zero-build; ~90s for a 600-file repo
 ccodegraph.py clink-import -p <root>     # OPTIONAL semantic layer (needs clink binary)
 … query verbs (repeat freely, ~100ms each) …
 (code changed?) build --incremental      # 1-file change ≈ 4s; no-op ≈ 4s when aligned
+              → then re-run clink-import   # it IS incremental: clink re-parses only
+                                           # changed files (its own per-file hash)
 ```
+
+Tool paths: `CCODEGRAPH_{CTAGS,CSCOPE,CLINK,GIT}_PATH` env vars override the
+system PATH lookup.
 
 **Graph freshness**: source-drift detection happens at `build --incremental`
 (hash comparison; prints "up to date" when aligned) — `schema` does NOT detect
@@ -50,12 +55,15 @@ pin one. Quote qnames in the shell (they contain `/` and `::`).
 | `explore X` | definition (signature, file:line) + callers + callees + globals it reads/writes — one shot | **default first move** on any symbol |
 | `callers X` | function-level deduped callers, one site + `(N sites)`; **includes `[fnptr]`/`[callback]`-tagged indirect callers and macro users** | who calls / who might dispatch to X |
 | `callees X` | what X calls (same edge kinds) | |
-| `impact X -d N` | transitive callers by depth. Default N=3; start N=2 on wide-fan-in symbols (log/util functions explode). Skips ambiguous edges by default → if it prints a hint about ambiguous edges, rerun with `--ambiguous` or you WILL underestimate the radius | before a refactor |
+| `impact X -d N` | "affects N symbols" headline + per-depth lists + by-file `name:line` groups (CodeGraph-shaped). Default N=2, clamp 1-10; start N=2 on wide-fan-in symbols (log/util functions explode). Skips ambiguous edges by default → if it prints a hint about ambiguous edges, rerun with `--ambiguous` or you WILL underestimate the radius | before a refactor |
 | `globals V` | writers vs readers, separated | "who mutates this state" |
 | `vars-of F` | globals F touches, `[reads]`/`[writes]` with sites | audit a function's state footprint |
 | `who-includes H` | files **directly** including header H, all `#include` spelling variants matched, already deduped — count lines directly, no re-verification needed (NOT transitive — SQL template 4 for the closure) | header-edit impact |
 | `co-changed F` | files historically changing with F (git). **Not subject to `--min-conf`** — statistical layer (conf 0.50), always shown with its count; weigh it yourself | "what else usually moves" |
 | `sql 'SELECT …'` | raw rows (connection is read-only) | anything the verbs don't shape |
+| `viz [--format html3d\|html2d] [--focus X -d N] [--full]` | single offline interactive HTML → `.ccodegraph/graph-<dim>.html`; default embeds the call family, `--full` all 8 kinds | show a human the graph |
+| `status` | tools+paths (env overrides flagged), skill install, products+sizes, artifact provenance, hash-exact drift vs tree | health check / "is the graph current" |
+| `reset` | delete `.ccodegraph/` (prints each removal) | start over |
 | `skill` | prints this file | air-gapped install |
 
 Flags: `--min-conf 0.7` (default; applies to call/read/write family, NOT
