@@ -57,7 +57,6 @@ PENDING_LAYERS: list[tuple[str, str]] = [
     ("callback", "L3: fn-as-argument 邊"),
     ("clink", "R7a: libclang 解析期歸戶 calls + 語意 writes(選配,需 clink binary)"),
     ("clangd", "L4: 高信心 calls/uses_type/signature 升級(需 compile DB)"),
-    ("git", "L5: co_changes 邊 + 增量失效"),
 ]
 
 SCHEMA_SQL = """
@@ -245,6 +244,38 @@ def include_matches(spec: str, header_relpath: str) -> bool:
     return os.path.basename(header_relpath) == spec
 
 
+def file_hash(path: str) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        h.update(fh.read())
+    return h.hexdigest()
+
+
+def compute_changes(old: dict[str, str], new: dict[str, str]) \
+        -> tuple[set[str], set[str], set[str]]:
+    """(changed, added, deleted)——L5 增量的失效單位是檔案 hash(FR7)。"""
+    changed = {p for p in new if p in old and old[p] != new[p]}
+    added = set(new) - set(old)
+    deleted = set(old) - set(new)
+    return changed, added, deleted
+
+
+def co_change_groups_to_pairs(groups: list[list[str]], cap: int = 20,
+                              min_count: int = 2) -> list[tuple[str, str, int]]:
+    """git 共變(L5):同 commit 檔案組 → 檔案對計數。超過 cap 的巨型 commit
+    略過(合併/重排噪音);count >= min_count 才成邊。純函式,unit 可測。"""
+    from collections import Counter
+    cnt: Counter[tuple[str, str]] = Counter()
+    for g in groups:
+        gs = sorted(set(g))
+        if len(gs) < 2 or len(gs) > cap:
+            continue
+        for i in range(len(gs)):
+            for j in range(i + 1, len(gs)):
+                cnt[(gs[i], gs[j])] += 1
+    return [(a, b, c) for (a, b), c in cnt.items() if c >= min_count]
+
+
 # ---------------------------------------------------------------- 外部工具層
 
 CTAGS_INSTALL_HINTS = """ERROR: ccodegraph 需要 Universal Ctags(偵測到:{flavor})
@@ -342,6 +373,42 @@ def source_files(root: str) -> list[str]:
         out.extend(os.path.relpath(os.path.join(dirpath, fn), root)
                    for fn in filenames if fn.endswith(exts))
     return sorted(out)
+
+
+def git_head(root: str) -> str | None:
+    try:
+        r = subprocess.run(["git", "-C", root, "rev-parse", "HEAD"],
+                           capture_output=True, text=True)
+    except FileNotFoundError:
+        return None
+    return r.stdout.strip() if r.returncode == 0 else None
+
+
+def git_co_change_groups(root: str, known: set[str],
+                         window: int = 500) -> list[list[str]]:
+    try:
+        r = subprocess.run(
+            ["git", "-C", root, "log", "--name-only",
+             "--pretty=format:%H", "-n", str(window)],
+            capture_output=True, text=True)
+    except FileNotFoundError:
+        return []
+    if r.returncode != 0:
+        return []
+    groups: list[list[str]] = []
+    cur: list[str] = []
+    for line in r.stdout.splitlines():
+        if not line.strip():
+            continue
+        if re.fullmatch(r"[0-9a-f]{40}", line):
+            if cur:
+                groups.append(cur)
+            cur = []
+        elif line in known:
+            cur.append(line)
+    if cur:
+        groups.append(cur)
+    return groups
 
 
 # ---------------------------------------------------------------- build
@@ -472,7 +539,8 @@ def make_resolver(con: sqlite3.Connection, defs: list[Def],
     return resolve
 
 
-def build(root: str, db_path: str, jobs: int) -> None:
+def build(root: str, db_path: str, jobs: int,
+          incremental: bool = False) -> None:
     require_universal_ctags()          # R2:flavor 偵測,非 Universal 大聲死
     try:
         subprocess.run(["cscope", "--version"], capture_output=True)
@@ -487,10 +555,80 @@ def build(root: str, db_path: str, jobs: int) -> None:
         with open(gi, "w") as fh:
             fh.write("*\n")           # 產物永不進使用者的版控(ccq 經驗)
 
+    srcs = source_files(root)
+    hashes = {p: file_hash(os.path.join(root, p)) for p in srcs}
+    kept_edges: list[tuple[Any, ...]] = []
+    affected: set[str] = set()
+    touched: set[str] = set()
+    deleted: set[str] = set()
+    aff_headers: set[str] = set()
+    if incremental and not os.path.exists(db_path):
+        print("(no existing graph — falling back to full build)")
+        incremental = False
+    if incremental:
+        oldcon = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+        old_hashes = dict(oldcon.execute(
+            "SELECT path, content_hash FROM files WHERE content_hash "
+            "IS NOT NULL"))
+        changed, added, deleted = compute_changes(old_hashes, hashes)
+        touched = changed | added
+        if not (touched or deleted):
+            print("up to date — nothing changed (hash-identical)")
+            return
+        print(f"[L5] incremental: changed={len(changed)} added={len(added)} "
+              f"deleted={len(deleted)}")
+        # 受影響符號 = 變更/刪除檔的舊定義名 + 變更檔文字中出現的識別字
+        #(後者涵蓋「不變檔對變更檔符號」與「變更檔內的呼叫站點」兩個方向)
+        ph = ",".join("?" * len(touched | deleted))
+        def_changed: set[str] = set()
+        for (nm,) in oldcon.execute(
+                f"SELECT DISTINCT name FROM nodes WHERE kind != 'file' "
+                f"AND file IN ({ph})", tuple(touched | deleted)):
+            def_changed.add(nm)
+        oldcon.close()
+        idents: set[str] = set()
+        specs: set[str] = set()
+        for p in touched:
+            try:
+                with open(os.path.join(root, p), errors="replace") as fh:
+                    text = fh.read()
+            except OSError:
+                continue
+            idents.update(IDENT_RE.findall(text))
+            specs.update(INCLUDE_RE.findall(text))
+        aff_headers = {h for h in srcs if h.endswith(HEADER_EXTS)
+                       and (h in touched or h in deleted
+                            or any(include_matches(sp, h) for sp in specs))}
+
     print("[L0] cscope index + ctags 節點 …")
     run_checked(["cscope", "-bkR", "-f", CSCOPE_DB], root)
     defs = assign_qnames(ctags_defs(root))
-    srcs = source_files(root)
+    if incremental:
+        # 定義真的變了的名字:舊圖在 touched|deleted 的定義 + 新解析在 touched 的定義
+        def_changed.update(d["name"] for d in defs if d["file"] in touched)
+        all_names = {d["name"] for d in defs}
+        # 重掃集 = touched 檔的識別字 ∩ 已知名(涵蓋站點被踢的邊)+ def_changed
+        affected = (idents & all_names) | def_changed
+        # 搬運:踢除條件收窄到「站點在 touched/deleted」或「端點定義變更」;
+        # 因 src 定義變更被踢的邊,其 dst 名補進重掃集(否則 dst 不受影響的
+        # 邊會永久丟失——wpa data→addEvent 類,136 邊漂移的根因)
+        oldcon2 = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+        for row in oldcon2.execute(
+                "SELECT n1.qname, n1.name, n2.qname, n2.name, e.kind, "
+                "e.file, e.line, e.origin, e.confidence, e.meta "
+                "FROM edges e JOIN nodes n1 ON n1.id=e.src "
+                "JOIN nodes n2 ON n2.id=e.dst "
+                "WHERE e.origin IN ('cscope', 'clink')"):
+            _sq, sn, _dq, dn, _k, ef, _ln, _o, _c, _m = row
+            if ef in touched or ef in deleted:
+                continue
+            if sn in def_changed:
+                affected.add(dn)
+                continue
+            if dn in def_changed:
+                continue
+            kept_edges.append(row)
+        oldcon2.close()
     n_fn = sum(1 for d in defs if d["kind"] == "function")
     n_gv = sum(1 for d in defs if d["kind"] == "global")
     n_mc = sum(1 for d in defs if d["kind"] == "macro")
@@ -503,8 +641,12 @@ def build(root: str, db_path: str, jobs: int) -> None:
         os.remove(tmp_db)
     con = sqlite3.connect(tmp_db)
     con.executescript(SCHEMA_SQL)
-    con.executemany("INSERT INTO files (path, lang) VALUES (?,?)",
-                    [(p, "c") for p in srcs])
+    head = git_head(root)
+    now = time.strftime("%Y-%m-%dT%H:%M:%S")
+    con.executemany(
+        "INSERT INTO files (path, lang, content_hash, indexed_at, git_rev) "
+        "VALUES (?,?,?,?,?)",
+        [(p, "c", hashes[p], now, head) for p in srcs])
     for d in defs:
         d["id"] = con.execute(
             "INSERT INTO nodes (name,qname,kind,file,line_start,line_end,"
@@ -529,22 +671,43 @@ def build(root: str, db_path: str, jobs: int) -> None:
                "macro": mc_index}[str(d["kind"])]
         idx.setdefault(d["name"], []).append(d)
 
-    def add_edge(src_id: int, dst_id: int, kind: str, file: str, line: int,
-                 origin: str, meta: str = "{}") -> None:
+    def add_edge(src_id: int, dst_id: int, kind: str, file: str | None,
+                 line: int | None, origin: str, meta: str = "{}") -> None:
         con.execute(
             "INSERT OR IGNORE INTO edges (src,dst,kind,file,line,origin,"
             "confidence,meta) VALUES (?,?,?,?,?,?,?,?)",
             (src_id, dst_id, kind, file, line, origin,
              CONFIDENCE[origin], meta))
 
-    fn_names = sorted(fn_index)
-    gv_names = sorted(gv_index)
+    if incremental:
+        qid = {q: i for q, i in con.execute(
+            "SELECT qname, id FROM nodes")}
+        n_kept = 0
+        for sq, _sn, dq, _dn, k, ef, ln, o, c, m in kept_edges:
+            si, di = qid.get(sq), qid.get(dq)
+            if si is not None and di is not None:
+                con.execute(
+                    "INSERT OR IGNORE INTO edges (src,dst,kind,file,line,"
+                    "origin,confidence,meta) VALUES (?,?,?,?,?,?,?,?)",
+                    (si, di, k, ef, ln, o, c, m))
+                n_kept += 1
+        print(f"[L5] kept {n_kept} edges; resweep {len(affected)} "
+              f"affected names")
+
+    def sweep_names(index: dict[str, list[Def]]) -> list[str]:
+        if incremental:
+            return sorted(set(index) & affected)
+        return sorted(index)
+
+    fn_names = sweep_names(fn_index)
+    gv_names = sweep_names(gv_index)
     print(f"[L1] cscope 邊:calls(-dL3)x{len(fn_names)} + "
           f"reads/writes x{len(gv_names)} + includes,{jobs} workers …")
-    headers = [p for p in srcs if p.endswith(HEADER_EXTS)]
+    all_headers = [p for p in srcs if p.endswith(HEADER_EXTS)]
     base_count: dict[str, int] = {}
-    for h in headers:
+    for h in all_headers:
         base_count[os.path.basename(h)] = base_count.get(os.path.basename(h), 0) + 1
+    headers = sorted(aff_headers) if incremental else all_headers
     with cf.ThreadPoolExecutor(max_workers=jobs) as ex:
         # calls:對每個函式名問「誰呼叫它」(-dL3;-dL2 會漏巢狀內層呼叫)
         callers_of = ex.map(lambda n: cscope_lines(root, "3", n), fn_names)
@@ -593,7 +756,7 @@ def build(root: str, db_path: str, jobs: int) -> None:
         # expands:函式 → 函式型巨集(L2';cscope 把巨集使用當呼叫報,
         # -dL3 <macro> 的歸戶與 calls 相同)。D11:tree-sitter 層除役後
         # 真正的缺口是這個維度(wpa 實測 586 個被呼叫的巨集)。
-        mc_names = sorted(mc_index)
+        mc_names = sweep_names(mc_index)
         users_of = ex.map(lambda n: cscope_lines(root, "3", n), mc_names)
         for name, rows in zip(mc_names, users_of, strict=True):
             for user, f, ln, _txt in rows:
@@ -644,11 +807,27 @@ def build(root: str, db_path: str, jobs: int) -> None:
     print(f"     callback={n_cb}, fnptr={n_fp}, "
           f"manual: registrations={n_mreg}, links={n_ml}")
 
+    # L5 後半:git 共變邊(退化矩陣:非 git repo → 明講跳過)
+    groups = git_co_change_groups(root, set(srcs))
+    if groups:
+        pairs = co_change_groups_to_pairs(groups)
+        for a, b, cnt2 in pairs:
+            ia, ib = file_ids.get(a), file_ids.get(b)
+            if ia and ib:
+                add_edge(ia, ib, "co_changes", None, None, "git",
+                         json.dumps({"count": cnt2, "window": 500}))
+        print(f"[L5] co_changes: {len(pairs)} pairs(git log 500 commits)")
+    else:
+        print("[L5] co_changes skipped — not a git repo(或 git 不可用)")
+
     con.execute("INSERT INTO meta VALUES ('schema_version','1')")
     con.execute("INSERT INTO meta VALUES ('root',?)", (root,))
     con.execute("INSERT INTO meta VALUES ('engines_run',?)",
                 (json.dumps([{"engine": "ctags+cscope+heuristics",
-                              "layers": "L0+L1+L3",
+                              "layers": "L0+L1+L3+L5",
+                              "mode": (f"incremental({len(touched)} touched, "
+                                       f"{len(deleted)} deleted)"
+                                       if incremental else "full"),
                               "seconds": round(time.time() - t0, 1)}]),))
     con.commit()
     counts = dict(con.execute("SELECT kind, COUNT(*) FROM edges GROUP BY kind"))
@@ -657,8 +836,7 @@ def build(root: str, db_path: str, jobs: int) -> None:
     print(f"done: {db_path}  ({len(defs) + len(srcs)} nodes; edges: "
           + ", ".join(f"{k}={v}" for k, v in sorted(counts.items()))
           + f"; {time.time() - t0:.0f}s)")
-    print("note: 語意層跑 `clink-import`(選配);L5(git)尚未填 — "
-          "`schema` 動詞會列出空格子。")
+    print("note: 語意層跑 `clink-import`(選配)可疊加 semantic 註記。")
 
 
 # ------------------------------------------------- compile DB:合併與合成
@@ -958,7 +1136,7 @@ def main() -> None:
     ap.add_argument("verb", choices=["build", "clink-import", "schema",
                                      "callers", "callees", "impact",
                                      "globals", "vars-of",
-                                     "who-includes", "sql"])
+                                     "who-includes", "co-changed", "sql"])
     ap.add_argument("arg", nargs="?")
     ap.add_argument("-p", "--root", default=".")
     ap.add_argument("--db")
@@ -966,6 +1144,8 @@ def main() -> None:
     ap.add_argument("-j", "--jobs", type=int, default=8)
     ap.add_argument("--min-conf", type=float, default=DEFAULT_MIN_CONF,
                     help="查詢信心門檻(design §3;預設 0.7)")
+    ap.add_argument("--incremental", action="store_true",
+                    help="L5:hash 圈變更集,只重掃受影響符號(FR7)")
     ap.add_argument("--compdb", help="逗號分隔的多份 compile_commands.json,"
                     "檔案層級合併(D12;順序=優先權)")
     ap.add_argument("--ambiguous", action="store_true",
@@ -975,7 +1155,7 @@ def main() -> None:
     db = a.db or os.path.join(root, DB_NAME)
 
     if a.verb == "build":
-        return build(root, db, a.jobs)
+        return build(root, db, a.jobs, a.incremental)
     if a.verb == "clink-import":
         return clink_import(root, db, a.compdb)
     if not os.path.exists(db):
@@ -1056,7 +1236,18 @@ def main() -> None:
                 "ON n.id=e.dst WHERE e.kind='includes' AND "
                 "(n.name=? OR n.qname=?) ORDER BY 1", (a.arg, a.arg)):
             print(src_file)
-    elif a.verb == "sql":
+    elif a.verb == "co-changed":
+        rows = con.execute(
+            "SELECT n1.qname, n2.qname, json_extract(e.meta,'$.count') "
+            "FROM edges e JOIN nodes n1 ON n1.id=e.src "
+            "JOIN nodes n2 ON n2.id=e.dst WHERE e.kind='co_changes' "
+            "AND (n1.qname=? OR n2.qname=?) ORDER BY 3 DESC",
+            (a.arg, a.arg)).fetchall()
+        if not rows:
+            print(f"no co-change data for {a.arg}(非 git repo 或共變 < 2 次)")
+        for f1, f2, cnt in rows:
+            other = f2 if f1 == a.arg else f1
+            print(f"{other}  (co-changed {cnt}x)")
         for row in con.execute(a.arg):
             print("|".join(str(c) for c in row))
 

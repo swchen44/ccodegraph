@@ -226,6 +226,110 @@ class TestBuildMiniproj(unittest.TestCase):
         self.assertEqual(engines[0]["layers"], "L0+L1+L3")
 
 
+def snapshot(db):
+    """normalized 圖快照(FR7):排除 volatile 欄與 clink 層(增量會保留、
+    fresh build 不含——比較的是 build 自產的部分)。"""
+    con = sqlite3.connect(db)
+    nodes = set(con.execute(
+        "SELECT qname, kind, file, line_start, line_end, is_static, "
+        "COALESCE(signature,'') FROM nodes"))
+    edges = set(con.execute(
+        "SELECT n1.qname, n2.qname, e.kind, e.origin, COALESCE(e.file,''), "
+        "COALESCE(e.line,-1) FROM edges e JOIN nodes n1 ON n1.id=e.src "
+        "JOIN nodes n2 ON n2.id=e.dst WHERE e.origin != 'clink'"))
+    con.close()
+    return nodes, edges
+
+
+@unittest.skipUnless(tools_ok(), "needs cscope + universal-ctags on PATH")
+class TestIncremental(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.root = os.path.join(self.tmp, "miniproj")
+        shutil.copytree(FIXTURE, self.root)
+        self.db = os.path.join(self.root, ig.DB_NAME)
+        ig.build(self.root, self.db, jobs=4)
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp)
+
+    def _edges(self, db):
+        con = sqlite3.connect(db)
+        out = set(con.execute(
+            "SELECT n1.qname, n2.qname, e.kind FROM edges e "
+            "JOIN nodes n1 ON n1.id=e.src JOIN nodes n2 ON n2.id=e.dst"))
+        con.close()
+        return out
+
+    def test_up_to_date_early_exit(self):
+        before = os.path.getmtime(self.db)
+        ig.build(self.root, self.db, jobs=4, incremental=True)
+        self.assertEqual(os.path.getmtime(self.db), before)   # 沒動 DB
+
+    def test_incremental_equals_full_rebuild(self):
+        # FR7 主驗收:改 1 檔後,增量結果 == 全量重建(normalized diff = 0)
+        with open(os.path.join(self.root, "util.c"), "a") as fh:
+            fh.write("\nint fresh_fn(void) { return add(2, 3); }\n")
+        ig.build(self.root, self.db, jobs=4, incremental=True)
+        inc = snapshot(self.db)
+        full_db = self.db + ".full"
+        ig.build(self.root, full_db, jobs=4)
+        full = snapshot(full_db)
+        self.assertEqual(inc[0], full[0], "nodes diverge")
+        self.assertEqual(inc[1], full[1], "edges diverge")
+
+    def test_incremental_new_edge_and_kept_edge(self):
+        with open(os.path.join(self.root, "util.c"), "a") as fh:
+            fh.write("\nint fresh_fn(void) { return add(2, 3); }\n")
+        ig.build(self.root, self.db, jobs=4, incremental=True)
+        edges = self._edges(self.db)
+        self.assertIn(("fresh_fn", "add", "calls"), edges)   # 新邊進來
+        self.assertIn(("main", "add", "calls"), edges)        # 舊邊保留
+        self.assertIn(("do_start", "alt_init.c::app_init", "calls"), edges)
+
+    def test_incremental_deleted_file(self):
+        os.remove(os.path.join(self.root, "alt_init2.c"))
+        ig.build(self.root, self.db, jobs=4, incremental=True)
+        con = sqlite3.connect(self.db)
+        qnames = {r[0] for r in con.execute(
+            "SELECT qname FROM nodes WHERE name='app_init'")}
+        con.close()
+        self.assertEqual(qnames, {"app_init"})   # 單定義 → 回到 plain qname
+        self.assertIn(("do_start", "app_init", "calls"), self._edges(self.db))
+
+
+@unittest.skipUnless(tools_ok(), "needs cscope + universal-ctags on PATH")
+class TestCoChanges(unittest.TestCase):
+    def test_git_co_change_edges(self):
+        tmp = tempfile.mkdtemp()
+        root = os.path.join(tmp, "miniproj")
+        shutil.copytree(FIXTURE, root)
+        env = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
+               "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
+        def git(*args):
+            subprocess.run(["git", "-C", root, *args], check=True,
+                           capture_output=True, env=env)
+        git("init", "-q")
+        git("add", "-A")
+        git("commit", "-qm", "c1")
+        for i in range(2):
+            for p in ("util.c", "main.c"):
+                with open(os.path.join(root, p), "a") as fh:
+                    fh.write(f"/* touch {i} */\n")
+            git("add", "-A")
+            git("commit", "-qm", f"pair {i}")
+        db = os.path.join(root, ig.DB_NAME)
+        ig.build(root, db, jobs=4)
+        con = sqlite3.connect(db)
+        pairs = set(con.execute(
+            "SELECT n1.qname, n2.qname FROM edges e "
+            "JOIN nodes n1 ON n1.id=e.src JOIN nodes n2 ON n2.id=e.dst "
+            "WHERE e.kind='co_changes'"))
+        con.close()
+        shutil.rmtree(tmp)
+        self.assertIn(("main.c", "util.c"), pairs)
+
+
 CLINK = os.environ.get("CCODEGRAPH_CLINK", "clink")
 
 

@@ -105,7 +105,7 @@ C++ 補充(W3 輕量策略,L2+ 才填):`class` `method` `namespace` 以 best-eff
 | manual | L3b | 1.00(語意 = asserted_by_user;fnptr.json sha256 進 meta,schema 動詞偵測 stale) | ✅ |
 | treesitter | L2 | 0.85 | ⬜ |
 | clangd / clangd-nobuild | L4 備用 | 0.95 / 0.75 | 保留(L4 已由 clink 交付) |
-| git | L5 | 0.50 | ⬜ |
+| git | L5 | 0.50(co_changes;meta.count/window) | ✅ |
 | clink | R7a | 0.93(no-build libclang;單 config 視角同 clangd) | ✅ 選配 |
 | (未來)asm-flow 等 | — | 進場時定 | 註冊表開放 |
 
@@ -373,7 +373,7 @@ vs 使用者原話「查詢層等 DB 完整後」)。測試缺口 T1-T8 入 road
 | L2 | tree-sitter 聯集 | ❌ 除役(D11,證據見 §8.5.1) | Universal ctags 5/7 全收 ts 贏過的場景 |
 | L2′ | macro 維度:macro 節點 + expands 邊 | ✅ 2026-07-05 | wpa:3814 macros、29739 expands;GT 28/28 不退;92 tests |
 | L4 | 語意註記層 | ✅ 2026-07-05(經 clink 交付,不驅動 clangd LSP) | signature 由 ctags +S 全填(wpa 9528/9528);clink 匯入時對 cscope calls/writes 逐對標 `semantic: confirmed\|absent`(wpa 70905/1091);有 compile DB 時 clink conf 升 0.95。**D3 重估結論:維持 meta-only**——absent 在 #ifdef 情境是線索不是裁決。clangd LSP origin 保留備用(precision suite 若顯示 clink 不足再啟) |
-| L5 | git 層(co_changes 邊 + content_hash 增量;改 1 檔 <5s、圖 diff=0) | ⬜ | |
+| L5 | git 層:hash 增量 + co_changes | ✅ 2026-07-05 | **wpa 改 1 檔 3.92s(全量 95s,24x)、normalized diff = 0、up-to-date 3.8s**;邊帶 qname 搬運(semantic 註記不丟);踢除規則 = 站點 in touched ∨ 端點定義變更(src 被踢 → dst 名補進重掃集——wpa 136 邊漂移的修正);co_changes 邊 origin=git conf 0.5 |
 | R4 | **查詢層設計(獨立階段,L0–L5 完整後)**:LLM 導向動詞 + SKILL.md(沿用 ccq 經驗:token 形狀、分節、標籤、schema 自省為第一動詞)——「重點是讓大語言模型知道如何使用」 | ⬜ 等完整 DB | 現有動詞是工程驗證用,非最終介面 |
 | R5 | VS Code plugin(友善 UI 讀同一份 graph.db) | ⬜ 最後 | 應用層;DB 是唯一事實來源,plugin 只是另一個 reader |
 | R6 | Rust 移植研究(傳聞 10x;等功能完整 + schema 穩定) | ⬜ 研究項 | D8:合約不動,引擎可換 |

@@ -331,5 +331,26 @@ class TestSynthesizeCompileDb(unittest.TestCase):
         self.assertIn("-Ilib", args)
 
 
+class TestComputeChanges(unittest.TestCase):
+    def test_partition(self):
+        old = {"a.c": "h1", "b.c": "h2", "gone.c": "h3"}
+        new = {"a.c": "h1", "b.c": "CHANGED", "new.c": "h4"}
+        changed, added, deleted = ig.compute_changes(old, new)
+        self.assertEqual(changed, {"b.c"})
+        self.assertEqual(added, {"new.c"})
+        self.assertEqual(deleted, {"gone.c"})
+
+
+class TestCoChangePairs(unittest.TestCase):
+    def test_count_and_min(self):
+        groups = [["a.c", "b.c"], ["a.c", "b.c"], ["a.c", "c.c"]]
+        pairs = ig.co_change_groups_to_pairs(groups, min_count=2)
+        self.assertEqual(pairs, [("a.c", "b.c", 2)])
+
+    def test_mega_commit_skipped(self):
+        groups = [[f"f{i}.c" for i in range(30)]] * 5
+        self.assertEqual(ig.co_change_groups_to_pairs(groups, cap=20), [])
+
+
 if __name__ == "__main__":
     unittest.main()
