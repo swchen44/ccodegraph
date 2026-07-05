@@ -151,6 +151,42 @@ class TestCLI(unittest.TestCase):
         out = self.run_cli("callers", "MAX2")
         self.assertIn("add", out)
 
+    def test_explore_one_shot(self):
+        out = self.run_cli("explore", "main")
+        self.assertIn("== main @ main.c:", out)
+        self.assertIn("callers (", out)
+        self.assertIn("callees (", out)
+        self.assertIn("add", out)
+        self.assertIn("main.c::helper", out)
+        self.assertIn("counter  [writes]", out)
+
+    def test_json_output_matches_text_fields(self):
+        import json as j
+        out = self.run_cli("callers", "add", "--json")
+        res = j.loads(out)
+        self.assertEqual(res["verb"], "callers")
+        d = res["definitions"][0]
+        self.assertEqual(d["qname"], "add")
+        callers = {it["qname"] for it in d["items"]}
+        self.assertIn("main", callers)
+        it = next(x for x in d["items"] if x["qname"] == "main")
+        self.assertIn("cscope", it["origins"])
+        self.assertGreaterEqual(it["confidence"], 0.9)
+
+    def test_json_schema_verb(self):
+        import json as j
+        res = j.loads(self.run_cli("schema", "--json"))
+        self.assertIn("function", res["nodes"])
+        self.assertTrue(any(e["kind"] == "calls" for e in res["edges"]))
+        self.assertTrue(any(e2.get("layers") for e2 in res["engines_run"]))
+
+    def test_json_explore(self):
+        import json as j
+        res = j.loads(self.run_cli("explore", "main", "--json"))
+        d = res["definitions"][0]
+        self.assertTrue(d["callees"])
+        self.assertTrue(any(g["access"] == "writes" for g in d["globals"]))
+
     def test_sql_escape_hatch(self):
         out = self.run_cli("sql", "SELECT COUNT(*) FROM nodes")
         self.assertGreater(int(out.strip()), 5)

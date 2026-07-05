@@ -398,6 +398,28 @@ class TestClinkImport(unittest.TestCase):
             "WHERE n1.name='gated' AND e.origin='cscope'").fetchone()[0]
         self.assertEqual(conf, 0.90)
 
+    def test_clink_schema_version_gate(self):
+        # P7:clink 換 schema 版本 → 大聲死,不靜默讀壞。
+        # stub 假 clink:產出 user_version=99 的空 DB(--database 是 argv[3])
+        stub = os.path.join(self.tmp, "fake-clink")
+        with open(stub, "w") as fh:
+            fh.write('#!/bin/sh\ncase "$1" in --version) exit 0;; esac\n'
+                     'python3 -c "import sqlite3,sys; '
+                     'c=sqlite3.connect(sys.argv[1]); '
+                     "c.execute('CREATE TABLE symbols(category,name,parent,path)'); "
+                     "c.execute('CREATE TABLE records(id,path)'); "
+                     "c.execute('PRAGMA user_version=99'); c.commit()\" \"$3\"\n")
+        os.chmod(stub, 0o755)
+        old = ig.CLINK_BIN
+        ig.CLINK_BIN = stub
+        try:
+            with self.assertRaises(SystemExit) as cm:
+                ig.clink_import(self.root, self.db)
+            self.assertIn("user_version=99", str(cm.exception))
+        finally:
+            ig.CLINK_BIN = old
+            ig.clink_import(self.root, self.db)   # 還原真 clink 匯入
+
     def test_engines_run_appended(self):
         engines = json.loads(self.con.execute(
             "SELECT value FROM meta WHERE key='engines_run'").fetchone()[0])

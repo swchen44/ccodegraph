@@ -976,6 +976,10 @@ def clink_import(root: str, db_path: str,
     con.execute("DELETE FROM edges WHERE origin='clink'")
 
     src_con = sqlite3.connect(f"file:{cdb}?mode=ro", uri=True)
+    ver = src_con.execute("PRAGMA user_version").fetchone()[0]
+    if ver != 1:
+        sys.exit(f"ERROR: clink db schema user_version={ver},匯入器只認 1 — "
+                 f"clink 改版了,請更新 clink_import 的欄位對映(P7:不靜默讀壞)")
     n_calls = n_writes = n_drop = 0
     for cat, name, parent, path, line in src_con.execute(
             "SELECT s.category, s.name, s.parent, r.path, s.line "
@@ -1034,6 +1038,11 @@ def clink_import(root: str, db_path: str,
 
 
 # ---------------------------------------------------------------- 查詢動詞
+# R4:每個動詞先產出資料結構(dict),再依 --json / 文字渲染(FR9 雙軌,
+# 欄位一一對應)。文字格式即 golden——測試釘住。
+
+QUERY_KINDS = ("calls", "fnptr", "callback", "expands")
+
 
 def fmt_site(padded: str | None) -> str:
     """edge_pairs.first_site 是 printf('%s:%09d') 的可排序形式 → 還原顯示。"""
@@ -1043,16 +1052,20 @@ def fmt_site(padded: str | None) -> str:
     return f"{f}:{int(n)}" if n.isdigit() else padded
 
 
-def fmt_tags(origins: str, meta_json: str | None) -> str:
-    tags = [origins]
+def parse_meta(meta_json: str | None) -> dict[str, Any]:
     try:
         m: dict[str, Any] = json.loads(meta_json) if meta_json else {}
     except json.JSONDecodeError:
         m = {}
-    if m.get("ambiguous"):
-        tags.append(f'ambiguous {m.get("candidates", "?")} candidates')
-    if "semantic" in m:
-        tags.append(f'semantic:{m["semantic"]}')
+    return m
+
+
+def fmt_tags(origins: str, meta: dict[str, Any]) -> str:
+    tags = [origins]
+    if meta.get("ambiguous"):
+        tags.append(f'ambiguous {meta.get("candidates", "?")} candidates')
+    if "semantic" in meta:
+        tags.append(f'semantic:{meta["semantic"]}')
     return "[" + "; ".join(tags) + "]"
 
 
@@ -1060,52 +1073,126 @@ def node_candidates(con: sqlite3.Connection, sym: str,
                     kinds: list[str]) -> list[tuple[Any, ...]]:
     ph = ",".join("?" * len(kinds))
     return con.execute(
-        f"SELECT id,name,qname,kind,file,line_start,is_static FROM nodes "
-        f"WHERE (name=? OR qname=?) AND kind IN ({ph}) ORDER BY file",
-        (sym, sym, *kinds)).fetchall()
+        f"SELECT id,name,qname,kind,file,line_start,is_static,signature "
+        f"FROM nodes WHERE (name=? OR qname=?) AND kind IN ({ph}) "
+        f"ORDER BY file", (sym, sym, *kinds)).fetchall()
 
 
-def sectioned(con: sqlite3.Connection, sym: str, direction: str,
-              min_conf: float) -> None:
-    """callers/callees:同名多定義 → 分節(D1);ambiguous 邊照 D4 顯示 + 標籤。"""
-    cands = node_candidates(con, sym, ["function", "macro"])
-    if not cands:
-        print(f'symbol "{sym}" not found (kind=function|macro)')
-        return
-    if len(cands) > 1:
-        print(f"{('callers' if direction == 'dst' else 'callees')} of {sym} "
-              f"— {len(cands)} definitions(分節;可用 qname 精確指定):\n")
+def pair_items(con: sqlite3.Connection, nid: int, direction: str,
+               kinds: tuple[str, ...], min_conf: float) -> list[dict[str, Any]]:
+    """pair 級去重列(D2):對向 qname + 首站點 + 站點數 + origins + meta。"""
     other = "src" if direction == "dst" else "dst"
-    for cid, _n, qname, _k, file, line, _st in cands:
-        if len(cands) > 1:
-            print(f"## {qname} 的定義 @ {file}:{line}")
-        rows = con.execute(
-            f"SELECT n.qname, p.first_site, p.site_count, p.origins, "
-            f"(SELECT meta FROM edges e WHERE e.{direction}=p.{direction} "
-            f" AND e.{other}=p.{other} AND e.kind=p.kind LIMIT 1) "
-            f"FROM edge_pairs p JOIN nodes n ON n.id=p.{other} "
-            f"WHERE p.{direction}=? AND p.kind IN "
-            f"('calls','fnptr','callback','expands') AND p.confidence >= ? "
-            f"ORDER BY n.qname", (cid, min_conf)).fetchall()
-        if not rows:
+    ph = ",".join("?" * len(kinds))
+    rows = con.execute(
+        f"SELECT n.qname, p.first_site, p.site_count, p.origins, "
+        f"p.confidence, "
+        f"(SELECT meta FROM edges e WHERE e.{direction}=p.{direction} "
+        f" AND e.{other}=p.{other} AND e.kind=p.kind LIMIT 1) "
+        f"FROM edge_pairs p JOIN nodes n ON n.id=p.{other} "
+        f"WHERE p.{direction}=? AND p.kind IN ({ph}) "
+        f"AND p.confidence >= ? ORDER BY n.qname",
+        (nid, *kinds, min_conf)).fetchall()
+    return [{"qname": qn, "site": fmt_site(site), "sites": nsites,
+             "origins": origins.split(","), "confidence": conf,
+             "tags": parse_meta(meta)}
+            for qn, site, nsites, origins, conf, meta in rows]
+
+
+def fmt_item(it: dict[str, Any]) -> str:
+    extra = f" ({it['sites']} sites)" if it["sites"] > 1 else ""
+    return (f"- {it['qname']}  @ {it['site']}{extra}  "
+            f"{fmt_tags(','.join(it['origins']), it['tags'])}")
+
+
+def q_sectioned(con: sqlite3.Connection, sym: str, direction: str,
+                min_conf: float) -> dict[str, Any]:
+    cands = node_candidates(con, sym, ["function", "macro"])
+    verb = "callers" if direction == "dst" else "callees"
+    res: dict[str, Any] = {"verb": verb, "symbol": sym,
+                           "min_conf": min_conf, "definitions": []}
+    for cid, _n, qname, kind, file, line, _st, sig in cands:
+        res["definitions"].append({
+            "qname": qname, "kind": kind, "file": file, "line": line,
+            "signature": sig,
+            "items": pair_items(con, cid, direction, QUERY_KINDS, min_conf)})
+    return res
+
+
+def render_sectioned(res: dict[str, Any]) -> None:
+    defs = res["definitions"]
+    if not defs:
+        print(f'symbol "{res["symbol"]}" not found (kind=function|macro)')
+        return
+    if len(defs) > 1:
+        print(f"{res['verb']} of {res['symbol']} — {len(defs)} definitions"
+              f"(分節;可用 qname 精確指定):\n")
+    for d in defs:
+        if len(defs) > 1:
+            print(f"## {d['qname']} 的定義 @ {d['file']}:{d['line']}")
+        if not d["items"]:
             print("- (none)")
-        for qn, site, nsites, origins, meta in rows:
-            extra = f" ({nsites} sites)" if nsites > 1 else ""
-            print(f"- {qn}  @ {fmt_site(site)}{extra}  {fmt_tags(origins, meta)}")
-        if len(cands) > 1:
+        for it in d["items"]:
+            print(fmt_item(it))
+        if len(defs) > 1:
             print()
 
 
-def cmd_schema(con: sqlite3.Connection) -> None:
-    print("nodes:")
+def q_explore(con: sqlite3.Connection, sym: str,
+              min_conf: float) -> dict[str, Any]:
+    """R4 頭牌動詞:一發 = 定義 + callers + callees + 全域讀寫 + 巨集使用。"""
+    cands = node_candidates(con, sym, ["function"])
+    res: dict[str, Any] = {"verb": "explore", "symbol": sym,
+                           "min_conf": min_conf, "definitions": []}
+    for cid, _n, qname, _k, file, line, _st, sig in cands:
+        callees_all = pair_items(con, cid, "src", QUERY_KINDS, min_conf)
+        gl = con.execute(
+            "SELECT n2.qname, e.kind, e.file, e.line FROM edges e "
+            "JOIN nodes n2 ON n2.id=e.dst WHERE e.src=? AND e.kind IN "
+            "('reads','writes') AND e.confidence >= ? "
+            "ORDER BY n2.qname, e.kind", (cid, min_conf)).fetchall()
+        res["definitions"].append({
+            "qname": qname, "file": file, "line": line, "signature": sig,
+            "callers": pair_items(con, cid, "dst", QUERY_KINDS, min_conf),
+            "callees": [x for x in callees_all
+                        if "expands" not in x["origins"] or True],
+            "globals": [{"qname": g, "access": k, "site": f"{gf}:{gl_}"}
+                        for g, k, gf, gl_ in gl],
+        })
+    return res
+
+
+def render_explore(res: dict[str, Any]) -> None:
+    defs = res["definitions"]
+    if not defs:
+        print(f'symbol "{res["symbol"]}" not found (kind=function)')
+        return
+    for d in defs:
+        sig = f"  {d['signature']}" if d["signature"] else ""
+        print(f"== {d['qname']} @ {d['file']}:{d['line']}{sig}")
+        print(f"callers ({len(d['callers'])}):")
+        for it in d["callers"]:
+            print("  " + fmt_item(it))
+        print(f"callees ({len(d['callees'])}):")
+        for it in d["callees"]:
+            print("  " + fmt_item(it))
+        print(f"globals ({len(d['globals'])}):")
+        for g in d["globals"]:
+            print(f"  - {g['qname']}  [{g['access']}]  @ {g['site']}")
+        print()
+
+
+def q_schema(con: sqlite3.Connection) -> dict[str, Any]:
+    res: dict[str, Any] = {"verb": "schema", "nodes": {}, "edges": [],
+                           "pending": [], "warnings": []}
     for kind, cnt in con.execute(
             "SELECT kind, COUNT(*) FROM nodes GROUP BY kind ORDER BY kind"):
-        print(f"  {kind:10s} {cnt}")
-    print("edges (kind x origin):")
+        res["nodes"][kind] = cnt
     for kind, origin, cnt in con.execute(
             "SELECT kind, origin, COUNT(*) FROM edges "
             "GROUP BY kind, origin ORDER BY kind"):
-        print(f"  {kind:10s} [{origin}] {cnt}")
+        res["edges"].append({"kind": kind, "origin": origin, "count": cnt})
+    row = con.execute("SELECT value FROM meta WHERE key='engines_run'").fetchone()
+    res["engines_run"] = json.loads(row[0]) if row else []
     root_row = con.execute("SELECT value FROM meta WHERE key='root'").fetchone()
     stored = con.execute(
         "SELECT value FROM meta WHERE key='manual_src_hash'").fetchone()
@@ -1116,26 +1203,43 @@ def cmd_schema(con: sqlite3.Connection) -> None:
             with open(fp, "rb") as fh:
                 cur = hashlib.sha256(fh.read()).hexdigest()
         if stored and cur != stored[0]:
-            print("WARNING: fnptr.json changed since build — manual edges are "
-                  "STALE; re-run build")
+            res["warnings"].append(
+                "fnptr.json changed since build — manual edges are STALE; "
+                "re-run build")
         elif stored and cur is None:
-            print("WARNING: fnptr.json deleted since build — manual edges are "
-                  "STALE; re-run build")
+            res["warnings"].append(
+                "fnptr.json deleted since build — manual edges are STALE; "
+                "re-run build")
         elif cur and not stored:
-            print("note: fnptr.json present but not in this graph — re-run "
-                  "build to ingest it")
+            res["warnings"].append(
+                "fnptr.json present but not in this graph — re-run build "
+                "to ingest it")
     filled = {r[0] for r in con.execute("SELECT DISTINCT origin FROM edges")}
-    print("pending(空格子,design §5):")
     for origin, desc in PENDING_LAYERS:
         if origin not in filled:
-            print(f"  {origin:12s} {desc}")
+            res["pending"].append({"origin": origin, "desc": desc})
+    return res
+
+
+def render_schema(res: dict[str, Any]) -> None:
+    for w in res["warnings"]:
+        print(f"WARNING: {w}" if "STALE" in w else f"note: {w}")
+    print("nodes:")
+    for kind, cnt in res["nodes"].items():
+        print(f"  {kind:10s} {cnt}")
+    print("edges (kind x origin):")
+    for e in res["edges"]:
+        print(f"  {e['kind']:10s} [{e['origin']}] {e['count']}")
+    print("pending(空格子,design §5):")
+    for p in res["pending"]:
+        print(f"  {p['origin']:12s} {p['desc']}")
 
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("verb", choices=["build", "clink-import", "schema",
-                                     "callers", "callees", "impact",
-                                     "globals", "vars-of",
+                                     "explore", "callers", "callees",
+                                     "impact", "globals", "vars-of",
                                      "who-includes", "co-changed", "sql"])
     ap.add_argument("arg", nargs="?")
     ap.add_argument("-p", "--root", default=".")
@@ -1150,6 +1254,8 @@ def main() -> None:
                     "檔案層級合併(D12;順序=優先權)")
     ap.add_argument("--ambiguous", action="store_true",
                     help="impact 也走 ambiguous 邊(D4 預設不走)")
+    ap.add_argument("--json", action="store_true",
+                    help="FR9:輸出 JSON(與文字欄位一一對應),LLM 自選格式")
     a = ap.parse_args()
     root = os.path.abspath(a.root)
     db = a.db or os.path.join(root, DB_NAME)
@@ -1165,18 +1271,30 @@ def main() -> None:
     # 查詢一律唯讀連線(codex 高風險 8):sql 逃生口不可變成破壞入口
     con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
 
+    def emit(res: dict[str, Any], render: Any) -> None:
+        if a.json:
+            print(json.dumps(res, ensure_ascii=False))
+        else:
+            render(res)
+
     if a.verb == "schema":
-        cmd_schema(con)
-    elif a.verb == "callers":
-        sectioned(con, a.arg, "dst", a.min_conf)
-    elif a.verb == "callees":
-        sectioned(con, a.arg, "src", a.min_conf)
+        emit(q_schema(con), render_schema)
+    elif a.verb == "explore":
+        emit(q_explore(con, a.arg, a.min_conf), render_explore)
+    elif a.verb in ("callers", "callees"):
+        emit(q_sectioned(con, a.arg,
+                         "dst" if a.verb == "callers" else "src",
+                         a.min_conf), render_sectioned)
     elif a.verb == "impact":
-        starts = [r[0] for r in node_candidates(con, a.arg, ["function"])]
+        starts = node_candidates(con, a.arg, ["function"])
         if not starts:
             sys.exit(f'symbol "{a.arg}" not found')
-        for sid in starts:
-            printed = 0
+        res: dict[str, Any] = {"verb": "impact", "symbol": a.arg,
+                               "depth": a.depth, "ambiguous": a.ambiguous,
+                               "definitions": []}
+        for row in starts:
+            sid, qname = row[0], row[2]
+            depths: dict[str, list[str]] = {}
             for depth, names in con.execute("""
                 WITH RECURSIVE up(id, depth) AS (
                   SELECT :sid, 0
@@ -1192,21 +1310,33 @@ def main() -> None:
                 GROUP BY u.depth ORDER BY u.depth""",
                     {"sid": sid, "mc": a.min_conf,
                      "amb": int(a.ambiguous), "dep": a.depth}):
-                print(f"depth {depth}: {names}")
-                printed += 1
-            if printed == 0 and not a.ambiguous:
+                depths[str(depth)] = names.split(",")
+            hint = None
+            if not depths and not a.ambiguous:
                 n_amb = con.execute(
                     "SELECT COUNT(*) FROM edges WHERE dst=? AND "
                     "instr(meta, '\"ambiguous\"') > 0", (sid,)).fetchone()[0]
                 if n_amb:
-                    print(f"(no unambiguous impact; {n_amb} ambiguous edges "
-                          f"exist — rerun with --ambiguous to include "
-                          f"multi-candidate attributions)")
+                    hint = (f"no unambiguous impact; {n_amb} ambiguous edges "
+                            f"exist — rerun with --ambiguous to include "
+                            f"multi-candidate attributions")
+            res["definitions"].append(
+                {"qname": qname, "depths": depths, "hint": hint})
+
+        def render_impact(res: dict[str, Any]) -> None:
+            for d in res["definitions"]:
+                for depth, names in d["depths"].items():
+                    print(f"depth {depth}: {','.join(names)}")
+                if d["hint"]:
+                    print(f"({d['hint']})")
+        emit(res, render_impact)
     elif a.verb == "globals":
         gcands = node_candidates(con, a.arg, ["global"])
         if not gcands:
             sys.exit(f'global "{a.arg}" not found')
-        for gid, _n, qname, *_rest in gcands:
+        res = {"verb": "globals", "symbol": a.arg, "definitions": []}
+        for row in gcands:
+            gid, qname = row[0], row[2]
             w = [r[0] for r in con.execute(
                 "SELECT DISTINCT n.qname FROM edges e JOIN nodes n "
                 "ON n.id=e.src WHERE e.dst=? AND e.kind='writes' "
@@ -1216,26 +1346,43 @@ def main() -> None:
                 "ON n.id=e.src WHERE e.dst=? AND e.kind='reads' "
                 "AND e.confidence >= ? ORDER BY n.qname", (gid, a.min_conf))
                 if x[0] not in w]
-            print(f"writers of {qname} ({len(w)}):")
-            for s in w:
-                print(f"  {s}")
-            print(f"readers ({len(r)}):")
-            for s in r:
-                print(f"  {s}")
+            res["definitions"].append(
+                {"qname": qname, "writers": w, "readers": r})
+
+        def render_globals(res: dict[str, Any]) -> None:
+            for d in res["definitions"]:
+                print(f"writers of {d['qname']} ({len(d['writers'])}):")
+                for x in d["writers"]:
+                    print(f"  {x}")
+                print(f"readers ({len(d['readers'])}):")
+                for x in d["readers"]:
+                    print(f"  {x}")
+        emit(res, render_globals)
     elif a.verb == "vars-of":
-        for qn, kind, f, ln in con.execute(
-                "SELECT n2.qname, e.kind, e.file, e.line FROM edges e "
-                "JOIN nodes n ON n.id=e.src JOIN nodes n2 ON n2.id=e.dst "
-                "WHERE (n.name=? OR n.qname=?) AND e.kind IN "
-                "('reads','writes') AND e.confidence >= ? "
-                "ORDER BY n2.qname, e.kind", (a.arg, a.arg, a.min_conf)):
-            print(f"{qn}  [{kind}]  @ {f}:{ln}")
+        items = [{"qname": qn, "access": kind, "site": f"{f2}:{ln}"}
+                 for qn, kind, f2, ln in con.execute(
+                     "SELECT n2.qname, e.kind, e.file, e.line FROM edges e "
+                     "JOIN nodes n ON n.id=e.src JOIN nodes n2 ON n2.id=e.dst "
+                     "WHERE (n.name=? OR n.qname=?) AND e.kind IN "
+                     "('reads','writes') AND e.confidence >= ? "
+                     "ORDER BY n2.qname, e.kind", (a.arg, a.arg, a.min_conf))]
+        res = {"verb": "vars-of", "symbol": a.arg, "items": items}
+
+        def render_varsof(res: dict[str, Any]) -> None:
+            for it in res["items"]:
+                print(f"{it['qname']}  [{it['access']}]  @ {it['site']}")
+        emit(res, render_varsof)
     elif a.verb == "who-includes":
-        for (src_file,) in con.execute(
-                "SELECT DISTINCT e.file FROM edges e JOIN nodes n "
-                "ON n.id=e.dst WHERE e.kind='includes' AND "
-                "(n.name=? OR n.qname=?) ORDER BY 1", (a.arg, a.arg)):
-            print(src_file)
+        files = [r[0] for r in con.execute(
+            "SELECT DISTINCT e.file FROM edges e JOIN nodes n "
+            "ON n.id=e.dst WHERE e.kind='includes' AND "
+            "(n.name=? OR n.qname=?) ORDER BY 1", (a.arg, a.arg))]
+        res = {"verb": "who-includes", "symbol": a.arg, "files": files}
+
+        def render_inc(res: dict[str, Any]) -> None:
+            for f2 in res["files"]:
+                print(f2)
+        emit(res, render_inc)
     elif a.verb == "co-changed":
         rows = con.execute(
             "SELECT n1.qname, n2.qname, json_extract(e.meta,'$.count') "
@@ -1243,13 +1390,20 @@ def main() -> None:
             "JOIN nodes n2 ON n2.id=e.dst WHERE e.kind='co_changes' "
             "AND (n1.qname=? OR n2.qname=?) ORDER BY 3 DESC",
             (a.arg, a.arg)).fetchall()
-        if not rows:
-            print(f"no co-change data for {a.arg}(非 git repo 或共變 < 2 次)")
-        for f1, f2, cnt in rows:
-            other = f2 if f1 == a.arg else f1
-            print(f"{other}  (co-changed {cnt}x)")
-        for row in con.execute(a.arg):
-            print("|".join(str(c) for c in row))
+        items = [{"file": (f2 if f1 == a.arg else f1), "count": cnt}
+                 for f1, f2, cnt in rows]
+        res = {"verb": "co-changed", "symbol": a.arg, "items": items}
+
+        def render_cc(res: dict[str, Any]) -> None:
+            if not res["items"]:
+                print(f"no co-change data for {res['symbol']}"
+                      f"(非 git repo 或共變 < 2 次)")
+            for it in res["items"]:
+                print(f"{it['file']}  (co-changed {it['count']}x)")
+        emit(res, render_cc)
+    elif a.verb == "sql":
+        for row2 in con.execute(a.arg):
+            print("|".join(str(c) for c in row2))
 
 
 if __name__ == "__main__":

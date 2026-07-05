@@ -374,7 +374,7 @@ vs 使用者原話「查詢層等 DB 完整後」)。測試缺口 T1-T8 入 road
 | L2′ | macro 維度:macro 節點 + expands 邊 | ✅ 2026-07-05 | wpa:3814 macros、29739 expands;GT 28/28 不退;92 tests |
 | L4 | 語意註記層 | ✅ 2026-07-05(經 clink 交付,不驅動 clangd LSP) | signature 由 ctags +S 全填(wpa 9528/9528);clink 匯入時對 cscope calls/writes 逐對標 `semantic: confirmed\|absent`(wpa 70905/1091);有 compile DB 時 clink conf 升 0.95。**D3 重估結論:維持 meta-only**——absent 在 #ifdef 情境是線索不是裁決。clangd LSP origin 保留備用(precision suite 若顯示 clink 不足再啟) |
 | L5 | git 層:hash 增量 + co_changes | ✅ 2026-07-05 | **wpa 改 1 檔 3.92s(全量 95s,24x)、normalized diff = 0、up-to-date 3.8s**;邊帶 qname 搬運(semantic 註記不丟);踢除規則 = 站點 in touched ∨ 端點定義變更(src 被踢 → dst 名補進重掃集——wpa 136 邊漂移的修正);co_changes 邊 origin=git conf 0.5 |
-| R4 | 查詢層設計 | 🔶 設計完成 2026-07-05 | [query-layer-design.md](query-layer-design.md):R4-1 風險語意入 SKILL(使用者拍板)、R4-2 --json 雙軌、explore 頭牌動詞、真 LLM A/B 驗收;實作 = 下一步 |
+| R4 | 查詢層設計 | 🔶 設計完成;實作 1/4 ✅ 2026-07-05 | [query-layer-design.md](query-layer-design.md);已交付:`explore` 頭牌動詞(定義+signature+callers+callees+全域讀寫,一發)+ **全動詞 `--json`**(FR9,欄位一一對應)+ clink schema user_version gate(P7)。待:SKILL.md(風險章)、真 LLM A/B、codex 第三輪 |
 | R5 | VS Code plugin(友善 UI 讀同一份 graph.db) | ⬜ 最後 | 應用層;DB 是唯一事實來源,plugin 只是另一個 reader |
 | R6 | Rust 移植研究(傳聞 10x;等功能完整 + schema 穩定) | ⬜ 研究項 | D8:合約不動,引擎可換 |
 | R7 | clink 研究:clone 實跑、萃取改良點 | ✅ 2026-07-05 | [research/clink.md](research/clink.md):六洞察 + 實跑數據 |
