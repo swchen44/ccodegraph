@@ -393,7 +393,7 @@ vs 使用者原話「查詢層等 DB 完整後」)。測試缺口 T1-T8 入 road
 | R4 | 查詢層設計 | 🔶 設計完成;實作 1/4 ✅ 2026-07-05 | [query-layer-design.md](query-layer-design.md);已交付:`explore` + 全動詞 `--json`(FR9)+ clink user_version gate + **SKILL.md v2(風險章,經 codex 第三輪陌生-agent 實測後全面補強:輸出範例、錯誤對照表、co-changed 門檻特例、semantic:absent 措辭校準、遞移 include SQL 模板)** + `skill` 動詞。**R4 完成 4/4**:真 LLM A/B(N=1 先導)= token 打平、正確性 5/5 vs 3/5,W1「靜默答錯」主張獲實證;[research/llm-ab.md](research/llm-ab.md) |
 | R5 | VS Code plugin(友善 UI 讀同一份 graph.db) | ⬜ 最後 | 應用層;DB 是唯一事實來源,plugin 只是另一個 reader |
 | #1-#8 | 使用者 2026-07-06 批次:viz(2d/3d/focus/--full)✅、--compdb 文件化 ✅、工具路徑 env vars ✅、status+reset ✅、clink-import 增量語意 ✅、impact 仿 CodeGraph(affects N + by-file,預設 2)✅、A/B 行為分析 ✅ | ✅ 2026-07-06 | |
-| R8 | module_mapping.csv(regex → module,build 時填 nodes.module;viz 分群強化) | ⬜ TODO(使用者拍板) | schema 欄位已就位(v2) |
+| R8 | module_mapping.csv | ✅ 2026-07-06 | `build --module-map`:regex 不分大小寫(ASCII)、module 名可中文、first-match-wins、壞列大聲死;viz 自動分群;4 unit + 1 integration 測試 |
 | R6 | Rust 移植研究(傳聞 10x;等功能完整 + schema 穩定) | ⬜ 研究項 | D8:合約不動,引擎可換 |
 | R7 | clink 研究:clone 實跑、萃取改良點 | ✅ 2026-07-05 | [research/clink.md](research/clink.md):六洞察 + 實跑數據 |
 | R7a | clink 匯入器(`clink-import` 動詞,origin=clink conf 0.93) | ✅ 2026-07-05 | wpa:+71403 calls/+215 writes/5s;GT 28/28 不退;**315 對 cscope 漏的 calls(巨集展開)**;層可重跑;選配(缺 clink 明講) |

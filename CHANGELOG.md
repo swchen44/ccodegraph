@@ -9,6 +9,22 @@ Pre-1.0 caveat (SemVer §4): anything MAY change at any time; the public API
 
 ## [Unreleased]
 
+### Added
+
+- Multi-DB advanced workflow: `--db` documented as a universal parameter for
+  per-compile-config graphs; clink by-products now follow the graph name
+  (`cfgA.db` → `cfgA.clink.db`); `meta.db_label` + append-only `meta.history`
+  (every write logged); new `dumpdb` verb (the DB's identity card); `status`
+  lists all databases under `.ccodegraph/`.
+- R8 `--module-map module_mapping.csv` (col 1 regex — case-insensitive for
+  ASCII, col 2 module name incl. Unicode; first match wins; bad rows fail
+  loudly) fills `nodes.module`; `viz` colors nodes by module.
+- README restructured into User zone / Developer zone with flow diagrams and
+  command categories; full English translation (`README.en.md`).
+- SKILL: "this file is the complete reference" + verify-only-when-answer-
+  critical guidance (real-LLM A/B finding: self-verification was the main
+  token overhead of the tool arm).
+
 ## [0.0.2] - 2026-07-06
 
 ### Fixed
