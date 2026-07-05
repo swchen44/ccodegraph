@@ -1,0 +1,31 @@
+name: ci
+on: [push, pull_request]
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            setup: sudo apt-get update && sudo apt-get install -y universal-ctags cscope
+          - os: macos-latest
+            setup: brew install universal-ctags cscope
+          - os: windows-latest        # lint + unit only(cscope 不易裝;NFR3 註記)
+            setup: choco install universal-ctags -y
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - name: Install tools
+        run: ${{ matrix.setup }}
+        shell: bash
+      - name: Lint
+        run: |
+          pip install ruff mypy
+          ruff check .
+          mypy ccodegraph.py
+        shell: bash
+      - name: Tests (integration/e2e 於缺 cscope 的平台自動 skip 並明講)
+        run: python -m unittest discover -s tests -t . -v
+        shell: bash

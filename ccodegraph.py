@@ -246,6 +246,36 @@ def include_matches(spec: str, header_relpath: str) -> bool:
 
 # ---------------------------------------------------------------- 外部工具層
 
+CTAGS_INSTALL_HINTS = """ERROR: ccodegraph 需要 Universal Ctags(偵測到:{flavor})
+安裝:
+  macOS   : brew install universal-ctags   (系統內建的是 BSD ctags,不相容)
+  Linux   : apt/dnf install universal-ctags(舊發行版給的是 Exuberant,不相容)
+  Windows : choco install universal-ctags / scoop install universal-ctags
+為什麼硬性要求:我們依賴 --output-format=json 與 end: 欄位(行區間歸戶,D1),
+Exuberant/BSD 皆無此能力;參數也不相容(--kinds-C vs --c-kinds vs 無 kind)。"""
+
+
+def classify_ctags(version_output: str) -> str:
+    """ctags --version 輸出 → universal | exuberant | bsd(NFR3/R2)。
+    BSD ctags 不認 --version(輸出 usage 或空)。"""
+    low = version_output.lower()
+    if "universal ctags" in low:
+        return "universal"
+    if "exuberant ctags" in low:
+        return "exuberant"
+    return "bsd"
+
+
+def require_universal_ctags() -> None:
+    try:
+        r = subprocess.run(["ctags", "--version"], capture_output=True, text=True)
+    except FileNotFoundError:
+        sys.exit(CTAGS_INSTALL_HINTS.format(flavor="not installed"))
+    flavor = classify_ctags(r.stdout + r.stderr)
+    if flavor != "universal":
+        sys.exit(CTAGS_INSTALL_HINTS.format(flavor=flavor))
+
+
 def run_checked(cmd: list[str], cwd: str) -> str:
     """外部工具失敗要大聲(P7,codex 高風險 3):非零 return code → 帶 stderr 終止。"""
     r = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
@@ -440,11 +470,12 @@ def make_resolver(con: sqlite3.Connection, defs: list[Def],
 
 
 def build(root: str, db_path: str, jobs: int) -> None:
-    for tool in ("cscope", "ctags"):
-        try:
-            subprocess.run([tool, "--version"], capture_output=True)
-        except FileNotFoundError:
-            sys.exit(f"ERROR: {tool} not found — L0/L1 需要它(NFR1)")
+    require_universal_ctags()          # R2:flavor 偵測,非 Universal 大聲死
+    try:
+        subprocess.run(["cscope", "--version"], capture_output=True)
+    except FileNotFoundError:
+        sys.exit("ERROR: cscope not found — L1 需要它(NFR1)。"
+                 "macOS: brew install cscope / Linux: apt install cscope")
     t0 = time.time()
     pdir = os.path.join(root, PRODUCTS_DIR)
     os.makedirs(pdir, exist_ok=True)

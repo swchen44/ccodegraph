@@ -343,7 +343,7 @@ vs 使用者原話「查詢層等 DB 完整後」)。測試缺口 T1-T8 入 road
 | L3b | manual 表補全(=R1;registrations + stale 偵測) | ✅ 2026-07-05 | FR3 完成:registrations(struct/field→handler,分派站點射 manual 邊,不受 FANOUT_CAP)+ links + sha256 stale 警告 |
 | — | ruff/mypy strict + 三層測試 + codex 紅隊處置 | ✅ 2026-07-05 | 75 tests |
 | R1 | (= L3b,已完成) | ✅ 2026-07-05 | |
-| R2 | **ctags 跨平台相容**:macOS(BSD ctags)/Linux(Exuberant)/Windows 參數差異——啟動偵測 flavor、參數對映表、非 Universal Ctags 時大聲死 + 安裝指引;CI 三平台矩陣 | ⬜ L2 前必須 | BSD ctags GT 污染是 ccq 時代已踩過的坑 |
+| R2 | ctags 跨平台相容:flavor 偵測(universal/exuberant/bsd)+ 非 Universal 大聲死附三平台安裝指引;CI 矩陣 ubuntu/macos/windows(windows 為 lint+unit,cscope 難裝) | ✅ 2026-07-05 | classify_ctags 純函式 + 4 unit tests;.github/workflows/ci.yml |
 | L2 | tree-sitter 聯集 builder(K&R/宣告子巢狀 defs) | ⬜ | origin=treesitter, 0.85 |
 | L4 | clangd 升級層(confirmed/absent 註記、signature、uses_type;需 compile DB) | ⬜ | D3 在此重估 |
 | L5 | git 層(co_changes 邊 + content_hash 增量;改 1 檔 <5s、圖 diff=0) | ⬜ | |

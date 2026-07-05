@@ -248,5 +248,24 @@ class TestLoadManual(unittest.TestCase):
             ig.load_manual(d)
 
 
+class TestClassifyCtags(unittest.TestCase):
+    def test_universal(self):
+        self.assertEqual(ig.classify_ctags(
+            "Universal Ctags 6.1.0, Copyright (C) 2015-2023"), "universal")
+
+    def test_exuberant(self):
+        self.assertEqual(ig.classify_ctags(
+            "Exuberant Ctags 5.8, Copyright (C) 1996-2009 Darren Hiebert"),
+            "exuberant")
+
+    def test_bsd_usage_output(self):
+        # BSD ctags 不認 --version,吐 usage
+        self.assertEqual(ig.classify_ctags(
+            "usage: ctags [-BFadtuwvx] [-f tagsfile] file ..."), "bsd")
+
+    def test_empty_output_treated_bsd(self):
+        self.assertEqual(ig.classify_ctags(""), "bsd")
+
+
 if __name__ == "__main__":
     unittest.main()
