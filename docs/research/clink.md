@@ -48,3 +48,22 @@
   repo 直接吃到 libclang 精度,不用自己驅動 LSP。
 - **R7b**:asm 解析器細讀(parse_asm),對接未來私有組語 flow 的參考實作。
 - **Schema v2 討論項**:節點/邊站點加 col(R5 前);目前 v1 不動。
+
+## 補記:建置與實跑(2026-07-05,brew llvm 21 + cmake 4.3.4,Apple Silicon)
+
+建置一次成功(`cmake -B build && cmake --build build`,需 `llvm-config` 於 PATH)。
+
+**category 語意實測確認**(fixture + wpa):`0`=definition、`1`=call(**帶 parent
+解析期歸戶**)、`2`=reference(`cmp` 傳參即此類 + parent——對應我們的 callback 訊號)、
+`3`=include(帶 include spec 原文)、`4`=**assignment**(對應我們的 writes)。
+
+**關鍵發現:`clink` 的 assignment 偵測抓到了 `counter++`(util.c:13 bump)——
+cscope `-L9` 漏掉、我們用 RMW 文字補償才救回的那類,clink 在 libclang 層原生就對。**
+
+**wpa 規模煙霧(620 檔、無 compile DB、libclang fallback)**:CPU ~6.6s(多核並行),
+defs 28340 / calls 67460(100% 帶 parent)/ refs 430956 / includes 3396 / assignments 42799。
+
+結論強化:R7a(clink 當 origin)從「值得評估」升級為「高優先」——no-build 下它就
+給出解析期歸戶的 calls + 語意級 writes,有 compile DB 則再升精度;匯入器只是
+SQL 翻譯(symbols → edges),完全符合 D7。confidence 建議 0.93(no-build fallback
+時 0.88,#ifdef 行為與 clangd 同屬單 config 視角,待 GT 實測定案)。
