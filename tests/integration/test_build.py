@@ -9,7 +9,7 @@ import subprocess
 import tempfile
 import unittest
 
-import idealgraph as ig
+import ccodegraph as ig
 
 FIXTURE = os.path.join(os.path.dirname(__file__), "..", "fixtures", "miniproj")
 

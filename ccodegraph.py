@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""idealgraph — 理想 C 知識圖譜:多引擎分層填料、逐筆標注 origin/confidence。
+"""ccodegraph — C/C++ 知識圖譜(C 優先 80%,C++ 輕量 20%):多引擎分層填料、逐筆標注 origin/confidence。
 
 Python 標準庫 only。外部 binary:cscope、universal-ctags(L0/L1);
 後續層(tree-sitter/clangd/git)缺工具時明講跳過,不靜默(NFR1/P7)。
@@ -28,7 +28,8 @@ from typing import Any
 Def = dict[str, Any]          # 節點 dict:name/kind/file/line_start/line_end/is_static/qname/id
 CscopeRow = tuple[str, str, int, str]   # (field2, file, line, text)
 
-DB_NAME = ".ideal-graph.db"
+PRODUCTS_DIR = ".ccodegraph"          # 所有中間產物集中此處(ccq 經驗:不污染使用者空間)
+DB_NAME = os.path.join(PRODUCTS_DIR, "graph.db")
 CSCOPE_DB = ".ideal-graph.cscope.out"   # 專用索引檔,不污染使用者自己的 cscope.out
 HEADER_EXTS = (".h", ".hpp", ".hh")
 FANOUT_CAP = 16                          # fnptr field 註冊數上限(超過視為雜訊)
@@ -420,6 +421,12 @@ def build(root: str, db_path: str, jobs: int) -> None:
         except FileNotFoundError:
             sys.exit(f"ERROR: {tool} not found — L0/L1 需要它(NFR1)")
     t0 = time.time()
+    pdir = os.path.join(root, PRODUCTS_DIR)
+    os.makedirs(pdir, exist_ok=True)
+    gi = os.path.join(pdir, ".gitignore")
+    if not os.path.exists(gi):
+        with open(gi, "w") as fh:
+            fh.write("*\n")           # 產物永不進使用者的版控(ccq 經驗)
 
     print("[L0] cscope index + ctags 節點 …")
     run_checked(["cscope", "-bkR", "-f", CSCOPE_DB], root)
@@ -661,7 +668,7 @@ def main() -> None:
     if a.verb == "build":
         return build(root, db, a.jobs)
     if not os.path.exists(db):
-        sys.exit(f"ERROR: no graph at {db} — run: idealgraph.py build -p {root}")
+        sys.exit(f"ERROR: no graph at {db} — run: ccodegraph.py build -p {root}")
     if a.verb not in ("schema",) and not a.arg:
         sys.exit("ERROR: symbol/SQL required")
     # 查詢一律唯讀連線(codex 高風險 8):sql 逃生口不可變成破壞入口

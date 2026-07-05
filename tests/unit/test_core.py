@@ -3,7 +3,7 @@ import json
 import typing
 import unittest
 
-import idealgraph as ig
+import ccodegraph as ig
 
 
 def n(name, file, start=1, end=99, static=False, kind="function"):

@@ -9,7 +9,7 @@ import unittest
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(
     os.path.abspath(__file__))))
-CLI = os.path.join(REPO, "idealgraph.py")
+CLI = os.path.join(REPO, "ccodegraph.py")
 FIXTURE = os.path.join(REPO, "tests", "fixtures", "miniproj")
 
 
