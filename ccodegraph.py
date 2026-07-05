@@ -695,14 +695,24 @@ def merge_compile_dbs(paths: list[str]) -> tuple[list[dict[str, Any]], list[str]
 
 
 def synthesize_compile_db(root: str, srcs: list[str]) -> list[dict[str, Any]]:
-    """no-build 合成 DB(ccq 血統):每個 .c 一條,-I 蓋所有含 header 的目錄。
-    給不了真實 -D(單 config 盲點不變),但 include 解析大幅改善。"""
+    """no-build 合成 DB(ccq 血統,D13):每個編譯單元一條,-I 蓋所有含 header
+    的目錄(include 命中率最大化;重名 header 依 -I 順序取捨,documented
+    approximation)。刻意不給 -D:猜不出 config,亂給比不給糟。
+    C 給 -xc/gnu11,C++ 給 -xc++/gnu++17(W3:C++ 資訊不漏)。"""
     inc_dirs = sorted({os.path.dirname(p) for p in srcs
                        if p.endswith(HEADER_EXTS) and os.path.dirname(p)})
-    base = ["cc", "-xc", "-std=gnu11", *[f"-I{d}" for d in inc_dirs]]
-    return [{"directory": root, "file": os.path.join(root, p),
-             "arguments": [*base, os.path.join(root, p)]}
-            for p in srcs if p.endswith((".c", ".cc", ".cpp"))]
+    incs = [f"-I{d}" for d in inc_dirs]
+    out: list[dict[str, Any]] = []
+    for p in srcs:
+        if p.endswith(".c"):
+            lang = ["cc", "-xc", "-std=gnu11"]
+        elif p.endswith((".cc", ".cpp")):
+            lang = ["c++", "-xc++", "-std=gnu++17"]
+        else:
+            continue
+        out.append({"directory": root, "file": os.path.join(root, p),
+                    "arguments": [*lang, *incs, os.path.join(root, p)]})
+    return out
 
 
 # ---------------------------------------------------------------- R7a: clink 匯入

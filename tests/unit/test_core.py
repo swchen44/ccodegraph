@@ -313,6 +313,14 @@ class TestMergeCompileDbs(unittest.TestCase):
 
 
 class TestSynthesizeCompileDb(unittest.TestCase):
+    def test_cpp_gets_cxx_flags(self):
+        # W3:C++ 檔不能被當 C 餵(-xc 會讓 C++ 解析失敗退回模糊)
+        entries = ig.synthesize_compile_db("/r", ["a.c", "b.cpp", "c.cc"])
+        by = {e["file"]: e["arguments"] for e in entries}
+        self.assertIn("-xc", by["/r/a.c"])
+        self.assertIn("-xc++", by["/r/b.cpp"])
+        self.assertIn("-std=gnu++17", by["/r/c.cc"])
+
     def test_entry_per_c_with_include_dirs(self):
         entries = ig.synthesize_compile_db(
             "/r", ["src/a.c", "src/inc/x.h", "lib/y.h", "lib/b.c", "top.h"])
