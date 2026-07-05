@@ -1,1 +1,2 @@
-{"links": [{"src": "dispatch_op", "dst": "extra_handler"}]}
+{"registrations": [{"struct": "ops", "field": "run", "handler": "extra_handler"}],
+ "links": [{"src": "dispatch_op", "dst": "extra_handler"}]}

@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import argparse
 import concurrent.futures as cf
+import hashlib
 import json
 import os
 import re
@@ -323,7 +324,8 @@ def _enclosing(by_file: dict[str, list[Def]], file: str, line: int) -> Def | Non
 
 
 def scan_l3(root: str, srcs: list[str], defs: list[Def],
-            fn_index: dict[str, list[Def]], add_edge: AddEdge) -> tuple[int, int]:
+            fn_index: dict[str, list[Def]], add_edge: AddEdge,
+            manual_regs: dict[str, list[tuple[int, str | None]]]) -> tuple[int, int, int]:
     """L3:callback(fn-as-arg)+ fnptr(field-keyed 註冊→分派)。單遍全檔文字掃描,
     字串/註解先剝除(string_fake_call 防線)。回傳 (callback 邊數, fnptr 邊數)。"""
     by_file: dict[str, list[Def]] = {}
@@ -333,7 +335,7 @@ def scan_l3(root: str, srcs: list[str], defs: list[Def],
     fn_names = set(fn_index)
     regs: dict[str, set[int]] = {}
     dispatch_sites: list[tuple[str, int, str, Def]] = []
-    n_cb = n_fp = 0
+    n_cb = n_fp = n_mreg = 0
 
     for path in srcs:
         try:
@@ -372,21 +374,50 @@ def scan_l3(root: str, srcs: list[str], defs: list[Def],
                 if did != src["id"]:
                     add_edge(src["id"], did, "fnptr", path, lineno, "fnptr", meta)
                     n_fp += 1
-    return n_cb, n_fp
+        # 使用者 registrations(FR3):asserted_by_user,不受 FANOUT_CAP 限制
+        for did, struct in manual_regs.get(field, []):
+            if did != src["id"]:
+                m: dict[str, Any] = {"manual": True, "field": field}
+                if struct:
+                    m["struct"] = struct
+                add_edge(src["id"], did, "fnptr", path, lineno, "manual",
+                         json.dumps(m, sort_keys=True))
+                n_mreg += 1
+    return n_cb, n_fp, n_mreg
 
 
-def manual_links(root: str, con: sqlite3.Connection, defs: list[Def],
-                 fn_index: dict[str, list[Def]], add_edge: AddEdge) -> int:
-    """fnptr.json 人工表(D7 血統:manual 邊 = ground truth,confidence 1.0,
-    端點缺定義時建 placeholder 節點——鐵律:永遠保留)。"""
+def load_manual(root: str) -> tuple[list[dict[str, str]], list[dict[str, str]], str | None]:
+    """讀 fnptr.json(FR3,ccq.fnptr.json 血統)→ (links, registrations, sha256)。
+    格式錯誤大聲死(P7)。registrations 需 field+handler(struct 選填);
+    links 需 src+dst。sha256 存進 meta 供 stale 偵測(manual = asserted_by_user,
+    來源變更後圖裡的 manual 邊即過期)。"""
     p = os.path.join(root, "fnptr.json")
     if not os.path.exists(p):
-        return 0
+        return [], [], None
+    with open(p, "rb") as fh:
+        raw = fh.read()
+    digest = hashlib.sha256(raw).hexdigest()
     try:
-        with open(p) as f:
-            data = json.load(f)
+        data = json.loads(raw)
     except json.JSONDecodeError as e:
-        sys.exit(f"ERROR: fnptr.json invalid JSON: {e}")   # P7:不靜默
+        sys.exit(f"ERROR: fnptr.json invalid JSON: {e}")
+    links: list[dict[str, str]] = []
+    for entry in data.get("links", []):
+        if not ("src" in entry and "dst" in entry):
+            sys.exit(f"ERROR: fnptr.json link needs src+dst: {entry}")
+        links.append(entry)
+    regs: list[dict[str, str]] = []
+    for entry in data.get("registrations", []):
+        if not ("field" in entry and "handler" in entry):
+            sys.exit(f"ERROR: fnptr.json registration needs field+handler: {entry}")
+        regs.append(entry)
+    return links, regs, digest
+
+
+def make_resolver(con: sqlite3.Connection, defs: list[Def],
+                  fn_index: dict[str, list[Def]]) -> Any:
+    """符號名 → node id:qname 精確 → 唯一 name → placeholder(manual 端點
+    缺定義時建佔位節點——鐵律:使用者斷言永遠保留)。"""
     by_qname = {d["qname"]: d for d in defs}
 
     def resolve(sym: str) -> int:
@@ -405,13 +436,7 @@ def manual_links(root: str, con: sqlite3.Connection, defs: list[Def],
         return int(con.execute("SELECT id FROM nodes WHERE qname=? AND "
                                "kind='function'", (sym,)).fetchone()[0])
 
-    n = 0
-    for link in data.get("links", []):
-        if "src" in link and "dst" in link:
-            add_edge(resolve(link["src"]), resolve(link["dst"]), "fnptr",
-                     "(manual)", 0, "manual", '{"manual": true}')
-            n += 1
-    return n
+    return resolve
 
 
 def build(root: str, db_path: str, jobs: int) -> None:
@@ -546,9 +571,23 @@ def build(root: str, db_path: str, jobs: int) -> None:
                          "cscope", meta)
 
     print("[L3] callback + fnptr 啟發式 + manual 表 …")
-    n_cb, n_fp = scan_l3(root, srcs, defs, fn_index, add_edge)
-    n_manual = manual_links(root, con, defs, fn_index, add_edge)
-    print(f"     callback={n_cb}, fnptr={n_fp}, manual={n_manual}")
+    mlinks, mregs, mhash = load_manual(root)
+    resolve = make_resolver(con, defs, fn_index)
+    manual_regs: dict[str, list[tuple[int, str | None]]] = {}
+    for r in mregs:
+        manual_regs.setdefault(r["field"], []).append(
+            (resolve(r["handler"]), r.get("struct")))
+    n_cb, n_fp, n_mreg = scan_l3(root, srcs, defs, fn_index, add_edge,
+                                 manual_regs)
+    n_ml = 0
+    for link in mlinks:
+        add_edge(resolve(link["src"]), resolve(link["dst"]), "fnptr",
+                 "(manual)", 0, "manual", '{"manual": true}')
+        n_ml += 1
+    if mhash:
+        con.execute("INSERT INTO meta VALUES ('manual_src_hash',?)", (mhash,))
+    print(f"     callback={n_cb}, fnptr={n_fp}, "
+          f"manual: registrations={n_mreg}, links={n_ml}")
 
     con.execute("INSERT INTO meta VALUES ('schema_version','1')")
     con.execute("INSERT INTO meta VALUES ('root',?)", (root,))
@@ -640,6 +679,24 @@ def cmd_schema(con: sqlite3.Connection) -> None:
             "SELECT kind, origin, COUNT(*) FROM edges "
             "GROUP BY kind, origin ORDER BY kind"):
         print(f"  {kind:10s} [{origin}] {cnt}")
+    root_row = con.execute("SELECT value FROM meta WHERE key='root'").fetchone()
+    stored = con.execute(
+        "SELECT value FROM meta WHERE key='manual_src_hash'").fetchone()
+    if root_row:
+        fp = os.path.join(root_row[0], "fnptr.json")
+        cur = None
+        if os.path.exists(fp):
+            with open(fp, "rb") as fh:
+                cur = hashlib.sha256(fh.read()).hexdigest()
+        if stored and cur != stored[0]:
+            print("WARNING: fnptr.json changed since build — manual edges are "
+                  "STALE; re-run build")
+        elif stored and cur is None:
+            print("WARNING: fnptr.json deleted since build — manual edges are "
+                  "STALE; re-run build")
+        elif cur and not stored:
+            print("note: fnptr.json present but not in this graph — re-run "
+                  "build to ingest it")
     filled = {r[0] for r in con.execute("SELECT DISTINCT origin FROM edges")}
     print("pending(空格子,design §5):")
     for origin, desc in PENDING_LAYERS:

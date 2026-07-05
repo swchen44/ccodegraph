@@ -121,6 +121,21 @@ class TestCLI(unittest.TestCase):
         out2 = self.run_cli("impact", "app_init", "-d", "1", "--ambiguous")
         self.assertIn("do_start", out2)
 
+    def test_manual_stale_warning(self):
+        # 改 fnptr.json 後 schema 必須警告 manual 邊過期(FR3 stale)
+        import os
+        fp = os.path.join(self.root, "fnptr.json")
+        with open(fp, "a") as fh:
+            fh.write("\n")
+        try:
+            out = self.run_cli("schema")
+            self.assertIn("STALE", out)
+        finally:
+            with open(fp) as fh:
+                content = fh.read()
+            with open(fp, "w") as fh:
+                fh.write(content.rstrip() + "\n")
+
     def test_sql_escape_hatch(self):
         out = self.run_cli("sql", "SELECT COUNT(*) FROM nodes")
         self.assertGreater(int(out.strip()), 5)

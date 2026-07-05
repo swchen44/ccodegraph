@@ -141,6 +141,28 @@ class TestBuildMiniproj(unittest.TestCase):
     def test_fnptr_dispatch_edge(self):
         self.assertIn(("dispatch_op", "ops.c::impl_run"), self.pairs("fnptr"))
 
+    def test_manual_registration_edge(self):
+        # FR3:registrations(struct/field → handler)→ 分派站點射 manual 邊
+        row = self.con.execute(
+            "SELECT e.file, e.line, e.meta, e.confidence FROM edges e "
+            "JOIN nodes n1 ON n1.id=e.src JOIN nodes n2 ON n2.id=e.dst "
+            "WHERE n1.name='dispatch_op' AND n2.name='extra_handler' "
+            "AND e.origin='manual' AND e.file != '(manual)'").fetchone()
+        self.assertIsNotNone(row, "registration-driven manual edge missing")
+        f, ln, meta, conf = row
+        self.assertEqual(f, "ops.c")
+        self.assertGreater(ln, 0)
+        m = json.loads(meta)
+        self.assertEqual(m.get("struct"), "ops")
+        self.assertEqual(m.get("field"), "run")
+        self.assertEqual(conf, 1.0)
+
+    def test_manual_src_hash_recorded(self):
+        row = self.con.execute(
+            "SELECT value FROM meta WHERE key='manual_src_hash'").fetchone()
+        self.assertIsNotNone(row)
+        self.assertEqual(len(row[0]), 64)   # sha256 hex
+
     def test_manual_link_edge(self):
         self.assertIn(("dispatch_op", "extra_handler"), self.pairs("fnptr"))
         conf = self.con.execute(

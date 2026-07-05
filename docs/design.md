@@ -102,7 +102,7 @@ C++ 補充(W3 輕量策略,L2+ 才填):`class` `method` `namespace` 以 best-eff
 | ctags | L0 | 0.95 | ✅ |
 | cscope | L1 | 0.90 | ✅ |
 | callback / fnptr | L3 | 0.70 / 0.80 | ✅(0.70 為 provisional,precision suite 後重估) |
-| manual | L3b | 1.00(語意 = asserted_by_user) | ⬜ R1 |
+| manual | L3b | 1.00(語意 = asserted_by_user;fnptr.json sha256 進 meta,schema 動詞偵測 stale) | ✅ |
 | treesitter | L2 | 0.85 | ⬜ |
 | clangd / clangd-nobuild | L4 | 0.95 / 0.75 | ⬜ |
 | git | L5 | 0.50 | ⬜ |
@@ -113,8 +113,8 @@ confidence 語意:**產生引擎的固有準確率之初始預設值**(來源 = 
 
 **edges.meta 合法鍵(封閉集合,v1)**:`ambiguous`(bool)`candidates`(int)
 `rule`(`non-static-dup`|`dup-basename`)`heur`(`fn-as-arg`)`field`(str)
-`handlers`(int)`rmw`(bool)`manual`(bool)`clangd`(`confirmed`|`absent`,L4)
-`stale`(bool,R1)。新增鍵必須先登記於此。
+`handlers`(int)`rmw`(bool)`manual`(bool)`struct`(str,registration 的結構名)`clangd`(`confirmed`|`absent`,L4)。
+stale 不是邊上的鍵——由 `schema` 動詞比對 meta.manual_src_hash 與現行 fnptr.json 即時判定。新增鍵必須先登記於此。
 
 **volatile 欄(normalized diff 排除)**:`meta.created_at`、`files.indexed_at`、
 `files.git_rev`、`engines_run.seconds`。圖 diff = 0 的定義:nodes(qname,kind,file,
@@ -340,9 +340,9 @@ vs 使用者原話「查詢層等 DB 完整後」)。測試缺口 T1-T8 入 road
 | L0 | ctags 節點 + qname 消歧 | ✅ 2026-07-05 | wpa 10605 節點 |
 | L1 | cscope 邊(calls/reads/writes/includes) | ✅ 2026-07-05 | 單層 26/28 |
 | L3a | callback + fnptr 啟發式 | ✅ 2026-07-05 | **wpa 28/28 + fnptr 5/5** |
-| L3b | manual 表補全(=R1;registrations + stale 標記) | ⬜ 次一步 | FR3 未完;現只有最小 links |
+| L3b | manual 表補全(=R1;registrations + stale 偵測) | ✅ 2026-07-05 | FR3 完成:registrations(struct/field→handler,分派站點射 manual 邊,不受 FANOUT_CAP)+ links + sha256 stale 警告 |
 | — | ruff/mypy strict + 三層測試 + codex 紅隊處置 | ✅ 2026-07-05 | 75 tests |
-| R1 | **fnptr 人工表補全**:ccq.fnptr.json 血統的 `registrations`(使用者指定 struct/field → handler)+ `links`——**使用者可設定參數是既有承諾,必須保留**;manual 邊 confidence 1.0 永遠保留 | ⬜ 次一步 | L3 收尾 |
+| R1 | (= L3b,已完成) | ✅ 2026-07-05 | |
 | R2 | **ctags 跨平台相容**:macOS(BSD ctags)/Linux(Exuberant)/Windows 參數差異——啟動偵測 flavor、參數對映表、非 Universal Ctags 時大聲死 + 安裝指引;CI 三平台矩陣 | ⬜ L2 前必須 | BSD ctags GT 污染是 ccq 時代已踩過的坑 |
 | L2 | tree-sitter 聯集 builder(K&R/宣告子巢狀 defs) | ⬜ | origin=treesitter, 0.85 |
 | L4 | clangd 升級層(confirmed/absent 註記、signature、uses_type;需 compile DB) | ⬜ | D3 在此重估 |

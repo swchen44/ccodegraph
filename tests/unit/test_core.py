@@ -212,5 +212,41 @@ class TestIncludeMatches(unittest.TestCase):
         self.assertTrue(ig.include_matches("a/b.h", "src/x/a/b.h"))
 
 
+class TestLoadManual(unittest.TestCase):
+    def _write(self, tmp, content):
+        import os
+        p = os.path.join(tmp, "fnptr.json")
+        with open(p, "w") as fh:
+            fh.write(content)
+        return tmp
+
+    def test_missing_file_empty(self):
+        import tempfile
+        links, regs, digest = ig.load_manual(tempfile.mkdtemp())
+        self.assertEqual((links, regs, digest), ([], [], None))
+
+    def test_valid_both_sections(self):
+        import tempfile
+        d = self._write(tempfile.mkdtemp(),
+                        '{"registrations": [{"struct": "ops", "field": "run",'
+                        ' "handler": "h"}], "links": [{"src": "a", "dst": "b"}]}')
+        links, regs, digest = ig.load_manual(d)
+        self.assertEqual(len(links), 1)
+        self.assertEqual(regs[0]["field"], "run")
+        self.assertEqual(len(digest), 64)
+
+    def test_registration_missing_handler_dies(self):
+        import tempfile
+        d = self._write(tempfile.mkdtemp(), '{"registrations": [{"field": "run"}]}')
+        with self.assertRaises(SystemExit):
+            ig.load_manual(d)
+
+    def test_invalid_json_dies(self):
+        import tempfile
+        d = self._write(tempfile.mkdtemp(), '{oops')
+        with self.assertRaises(SystemExit):
+            ig.load_manual(d)
+
+
 if __name__ == "__main__":
     unittest.main()
