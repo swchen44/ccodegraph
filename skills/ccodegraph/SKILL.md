@@ -116,19 +116,20 @@ configs). A single `[callback]` = heuristic only. Union philosophy: missing
 edges are fought with multiple engines, false edges with labels; filtering is
 YOUR call (`--min-conf`), never silent deletion.
 
-### `semantic: confirmed | absent` — the #ifdef signal
+### `semantic: confirmed | absent` — a parse-coverage signal (NOT an #ifdef signal)
 
-- `confirmed` — libclang also sees this edge in the active config.
-- `absent` — **not confirmed by the active semantic config**. Most common
-  causes: inactive `#ifdef` branch, other-platform file (measured on wpa:
-  13,895 absent, essentially all config-gated). Rarely it can also be a
-  name-keyed mis-bind from cscope — when the answer matters, open the cited
-  `file:line` to distinguish. Confidence is deliberately NOT lowered for
-  absent: absence here is a clue, not a verdict.
-- **"這段 `#ifdef` 有人用嗎" recipe**: `callers <fn-inside-the-block>` — edges
-  tagged `semantic:absent` but present via cscope = referenced by code that is
-  compiled out in this config; nothing at all = likely dead in every config
-  the text layer can see.
+- `confirmed` — clink (libclang tokenization) also saw this edge. Note:
+  clink's call extraction is TOKEN-level and **includes inactive `#ifdef`
+  regions by design** (it is a cscope successor) — so confirmed does NOT
+  mean "active in this build config".
+- `absent` — the edge sits **outside clink's successful parse coverage**.
+  Measured causes on wpa (13,895 absent): whole files clink could not parse
+  (Qt C++ .cpp), files whose clang parse aborted mid-way (missing includes),
+  C++ weak areas. It is a "second engine never looked here" flag, not a
+  falsity signal. Confidence is deliberately NOT lowered.
+- Wanting true active-config precision (statement-level `#ifdef`) requires a
+  real clangd/clang-AST pass with the actual `-D` set — not provided today;
+  see blind-spot table.
 
 ### `ambiguous N candidates` — same-name multiple definitions
 

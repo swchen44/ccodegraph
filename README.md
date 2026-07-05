@@ -72,7 +72,7 @@ STALE 處理——誠實標注只有在讀者會判讀時才有價值。
 | 呼叫邊召回(cflow 28 邊 GT) | **28/28**(cscope 26、單一工具皆 ≤27) |
 | fnptr `.scan2` 分派 | 5/5;callback 3/3 |
 | 建圖 / 增量(改 1 檔)/ 無變更 | 90s / **3.9s** / 3.8s(增量與全量 normalized diff = 0) |
-| 語意註記(clink) | confirmed 58k / absent 13.9k(= config-gated 碼的誠實訊號) |
+| 語意註記(clink) | confirmed 58k / absent 13.9k(= clink 解析覆蓋之外——第二引擎沒看過的誠實標記;D14) |
 | token(代理量測,8 任務) | 比 grep/Read 路徑省 13×(中位 44×) |
 | **真 LLM A/B**(codex,5 任務,N=1) | token 打平(A +16%);**正確性 5/5 vs 3/5**——grep 臂兩題靜默答錯(include 數量錯 2 倍、漏 31% 全域寫入者);[方法與全數據](docs/research/llm-ab.md) |
 

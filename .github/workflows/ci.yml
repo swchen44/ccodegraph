@@ -28,4 +28,5 @@ jobs:
         shell: bash
       - name: Tests (integration/e2e 於缺 cscope 的平台自動 skip 並明講)
         run: python -m unittest discover -s tests -t . -v
+        env: { NO_COLOR: "1" }
         shell: bash

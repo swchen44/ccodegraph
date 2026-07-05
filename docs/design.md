@@ -341,6 +341,16 @@ schema 早留了格子,零 schema 變更。
 (歸戶失敗 -84%,absent 13,895 = config-gated 類的誠實訊號)。cscope 全分支層
 保留在聯集裡,兩視角互補(P6 重演)。
 
+## 8.5.3 D14:semantic:absent 語意修正(2026-07-06,fixture 抓到的實測翻案)
+
+gated.c fixture(`#ifdef FEATURE_X` 未定義)揭露:**clink 的 call 抽取是 token 層**
+(`clang_tokenize` 含 inactive 區——cscope 繼承者的刻意設計),所以 inactive `#ifdef`
+內的呼叫會被 clink「看到」→ confirmed。wpa 的 13,895 條 absent 定性(抽樣):
+整檔解析失敗(Qt C++)、缺 include 導致 clang 中斷的大檔(ctrl_iface.c 671 條)、
+C++ 弱區——**absent = 解析覆蓋洞,不是 config-gated 訊號**。早前文件的
+「absent = config-gated」詮釋據此修正(SKILL/README 同步)。語句級 `#ifdef`
+精度需要真 clangd/clang-AST + 真實 -D——保留給 L4 備用路線的重啟條件。
+
 ## 8.6 第二輪紅隊(文件盲區)處置(2026-07-05)
 
 報告:[reviews/2026-07-05-codex-docs-round2.md](reviews/2026-07-05-codex-docs-round2.md)。

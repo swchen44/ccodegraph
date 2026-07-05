@@ -148,7 +148,7 @@ class TestCLI(unittest.TestCase):
                             self.root], capture_output=True, text=True)
         assert r.returncode == 0, r.stdout + r.stderr
         out = self.run_cli("callers", "rarely")
-        self.assertIn("semantic:absent", out)
+        self.assertIn("semantic:confirmed", out)   # D14:token 層含 inactive 區
 
     def test_macro_callers(self):
         out = self.run_cli("callers", "MAX2")

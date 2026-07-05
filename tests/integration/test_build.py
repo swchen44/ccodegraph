@@ -223,7 +223,7 @@ class TestBuildMiniproj(unittest.TestCase):
     def test_meta_provenance(self):
         engines = json.loads(self.con.execute(
             "SELECT value FROM meta WHERE key='engines_run'").fetchone()[0])
-        self.assertEqual(engines[0]["layers"], "L0+L1+L3")
+        self.assertEqual(engines[0]["layers"], "L0+L1+L3+L5")
 
 
 def snapshot(db):
@@ -385,14 +385,16 @@ class TestClinkImport(unittest.TestCase):
             "AND n2.name='add' AND e.origin='cscope'").fetchone()[0]
         self.assertIn('"semantic":"confirmed"', meta.replace(" ", ""))
 
-    def test_semantic_absent_on_inactive_ifdef(self):
-        # gated.c:#ifdef FEATURE_X 未定義 → cscope 看得到、libclang 看不到
+    def test_semantic_annotation_on_inactive_ifdef(self):
+        # D14 實測修正:clink 的 call 抽取是 token 層(clang_tokenize 連
+        # inactive #ifdef 區都收——cscope 繼承者的設計)。gated.c 的
+        # #ifdef FEATURE_X 呼叫因此是 CONFIRMED;absent 的真義是
+        # 「clink 解析覆蓋之外」(整檔失敗/缺 include 中斷/C++ 弱區)。
         meta = self.con.execute(
             "SELECT e.meta FROM edges e JOIN nodes n1 ON n1.id=e.src "
             "JOIN nodes n2 ON n2.id=e.dst WHERE n1.name='gated' "
             "AND n2.name='rarely' AND e.origin='cscope'").fetchone()[0]
-        self.assertIn('"semantic":"absent"', meta.replace(" ", ""))
-        # D3:confidence 不因 absent 降級
+        self.assertIn('"semantic":"confirmed"', meta.replace(" ", ""))
         conf = self.con.execute(
             "SELECT e.confidence FROM edges e JOIN nodes n1 ON n1.id=e.src "
             "WHERE n1.name='gated' AND e.origin='cscope'").fetchone()[0]

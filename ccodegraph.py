@@ -33,7 +33,7 @@ CscopeRow = tuple[str, str, int, str]   # (field2, file, line, text)
 
 PRODUCTS_DIR = ".ccodegraph"          # 所有中間產物集中此處(ccq 經驗:不污染使用者空間)
 DB_NAME = os.path.join(PRODUCTS_DIR, "graph.db")
-CSCOPE_DB = ".ideal-graph.cscope.out"   # 專用索引檔,不污染使用者自己的 cscope.out
+CSCOPE_DB = os.path.join(PRODUCTS_DIR, "cscope.out")   # 專用索引,集中產物目錄(FR6)
 HEADER_EXTS = (".h", ".hpp", ".hh")
 FANOUT_CAP = 16                          # fnptr field 註冊數上限(超過視為雜訊)
 DEFAULT_MIN_CONF = 0.7
@@ -562,6 +562,10 @@ def build(root: str, db_path: str, jobs: int,
     t0 = time.time()
     pdir = os.path.join(root, PRODUCTS_DIR)
     os.makedirs(pdir, exist_ok=True)
+    legacy = os.path.join(root, ".ideal-graph.cscope.out")
+    if os.path.exists(legacy):          # 改名遷移(一次性)
+        os.remove(legacy)
+        print(f"removed legacy {legacy}")
     gi = os.path.join(pdir, ".gitignore")
     if not os.path.exists(gi):
         with open(gi, "w") as fh:
@@ -613,7 +617,9 @@ def build(root: str, db_path: str, jobs: int,
                             or any(include_matches(sp, h) for sp in specs))}
 
     print("[L0] cscope index + ctags 節點 …")
-    run_checked([tool_path("cscope"), "-bkR", "-f", CSCOPE_DB], root)
+    cscope_flags = "-bkRu" if (incremental and (touched or deleted)) \
+        else "-bkR"   # -u:增量時無條件重建(cscope 吃 mtime 秒級精度,快改看不見)
+    run_checked([tool_path("cscope"), cscope_flags, "-f", CSCOPE_DB], root)
     defs = assign_qnames(ctags_defs(root))
     if incremental:
         # 定義真的變了的名字:舊圖在 touched|deleted 的定義 + 新解析在 touched 的定義
@@ -885,6 +891,7 @@ def merge_compile_dbs(paths: list[str]) -> tuple[list[dict[str, Any]], list[str]
 
 
 def synthesize_compile_db(root: str, srcs: list[str]) -> list[dict[str, Any]]:
+    root = os.path.realpath(root)   # macOS /var↔/private/var:與 clink 的 realpath 視角對齊
     """no-build 合成 DB(ccq 血統,D13):每個編譯單元一條,-I 蓋所有含 header
     的目錄(include 命中率最大化;重名 header 依 -I 順序取捨,documented
     approximation)。刻意不給 -D:猜不出 config,亂給比不給糟。
@@ -1013,7 +1020,8 @@ def clink_import(root: str, db_path: str,
         if not parent:
             continue
         if os.path.isabs(path):
-            path = os.path.relpath(path, root)
+            path = os.path.relpath(os.path.realpath(path),
+                                   os.path.realpath(root))
         src = attribute_src(fn_index, parent, path, line)
         if not src:
             n_drop += 1
@@ -1245,7 +1253,8 @@ def pair_items(con: sqlite3.Connection, nid: int, direction: str,
         f"SELECT n.qname, p.first_site, p.site_count, p.origins, "
         f"p.confidence, "
         f"(SELECT meta FROM edges e WHERE e.{direction}=p.{direction} "
-        f" AND e.{other}=p.{other} AND e.kind=p.kind LIMIT 1) "
+        f" AND e.{other}=p.{other} AND e.kind=p.kind "
+        f" ORDER BY (e.meta = '{{}}'), e.origin LIMIT 1) "
         f"FROM edge_pairs p JOIN nodes n ON n.id=p.{other} "
         f"WHERE p.{direction}=? AND p.kind IN ({ph}) "
         f"AND p.confidence >= ? ORDER BY n.qname",

@@ -9,6 +9,27 @@ Pre-1.0 caveat (SemVer §4): anything MAY change at any time; the public API
 
 ## [Unreleased]
 
+### Fixed
+
+- cscope index file now really lands in `.ccodegraph/cscope.out` (the rename
+  had silently no-opped; legacy root `.ideal-graph.cscope.out` auto-removed).
+- macOS `/var` ↔ `/private/var` symlink duality broke synthesized compile-DB
+  lookups (clink silently fell back to fuzzy parsing) and produced garbage
+  relative paths in imported sites — all paths now realpath-canonicalized.
+- Incremental builds force a full cscope cross-reference rebuild (`-u`):
+  cscope's own mtime check has 1-second granularity and missed rapid edits.
+- Test-runner discipline: Python 3.13 colorized unittest output defeated the
+  CI-parity grep locally; suites now run with NO_COLOR and are judged by
+  exit code.
+
+### Changed
+
+- **D14 (honest correction)**: `semantic: absent` documented as a
+  parse-coverage flag ("clink never successfully looked here"), NOT an
+  inactive-`#ifdef` indicator — clink's call extraction is token-level and
+  includes inactive regions by design. SKILL risk chapter, README and design
+  docs updated; fixture pins the corrected reality.
+
 ## [0.0.1] - 2026-07-06
 
 First public release. C/C++ knowledge graph for LLM agents: zero-build
