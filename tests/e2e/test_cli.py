@@ -82,8 +82,11 @@ class TestCLI(unittest.TestCase):
 
     def test_impact(self):
         out = self.run_cli("impact", "add", "-d", "2")
+        self.assertIn("affects", out)                 # 仿 CodeGraph 標題
         self.assertIn("depth 1", out)
         self.assertIn("main", out)
+        self.assertIn("by file:", out)                # 按檔分組
+        self.assertIn("main.c: main:", out)
 
     def test_globals_writers_vs_readers(self):
         out = self.run_cli("globals", "counter")

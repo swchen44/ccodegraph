@@ -1385,7 +1385,8 @@ def main() -> None:
     ap.add_argument("arg", nargs="?")
     ap.add_argument("-p", "--root", default=".")
     ap.add_argument("--db")
-    ap.add_argument("-d", "--depth", type=int, default=3)
+    ap.add_argument("-d", "--depth", type=int, default=2,
+                    help="impact/viz-focus 深度(仿 CodeGraph:預設 2,夾 1-10)")
     ap.add_argument("-j", "--jobs", type=int, default=8)
     ap.add_argument("--min-conf", type=float, default=DEFAULT_MIN_CONF,
                     help="查詢信心門檻(design §3;預設 0.7)")
@@ -1448,13 +1449,16 @@ def main() -> None:
         starts = node_candidates(con, a.arg, ["function"])
         if not starts:
             sys.exit(f'symbol "{a.arg}" not found')
+        dep = max(1, min(10, a.depth))          # 仿 CodeGraph:clamp 1-10
         res: dict[str, Any] = {"verb": "impact", "symbol": a.arg,
-                               "depth": a.depth, "ambiguous": a.ambiguous,
+                               "depth": dep, "ambiguous": a.ambiguous,
                                "definitions": []}
         for row in starts:
             sid, qname = row[0], row[2]
             depths: dict[str, list[str]] = {}
-            for depth, names in con.execute("""
+            by_file: dict[str, list[dict[str, Any]]] = {}
+            total = 0
+            for depth, qn, nfile, nline in con.execute("""
                 WITH RECURSIVE up(id, depth) AS (
                   SELECT :sid, 0
                   UNION
@@ -1464,12 +1468,15 @@ def main() -> None:
                        AND confidence >= :mc
                        AND (:amb OR instr(meta, '"ambiguous"') = 0)) e
                   JOIN up u ON e.dst=u.id WHERE u.depth < :dep)
-                SELECT u.depth, GROUP_CONCAT(DISTINCT n.qname)
+                SELECT MIN(u.depth), n.qname, n.file, n.line_start
                 FROM up u JOIN nodes n ON n.id=u.id WHERE u.depth>0
-                GROUP BY u.depth ORDER BY u.depth""",
+                GROUP BY n.qname ORDER BY 1, n.qname""",
                     {"sid": sid, "mc": a.min_conf,
-                     "amb": int(a.ambiguous), "dep": a.depth}):
-                depths[str(depth)] = names.split(",")
+                     "amb": int(a.ambiguous), "dep": dep}):
+                depths.setdefault(str(depth), []).append(qn)
+                by_file.setdefault(nfile, []).append(
+                    {"name": qn.rsplit("::", 1)[-1], "line": nline})
+                total += 1
             hint = None
             if not depths and not a.ambiguous:
                 n_amb = con.execute(
@@ -1480,14 +1487,26 @@ def main() -> None:
                             f"exist — rerun with --ambiguous to include "
                             f"multi-candidate attributions")
             res["definitions"].append(
-                {"qname": qname, "depths": depths, "hint": hint})
+                {"qname": qname, "affects": total, "depths": depths,
+                 "by_file": by_file, "hint": hint})
 
         def render_impact(res: dict[str, Any]) -> None:
+            multi = len(res["definitions"]) > 1
             for d in res["definitions"]:
+                print(f"impact of {d['qname']} — affects {d['affects']} "
+                      f"symbols (depth <= {res['depth']})")
                 for depth, names in d["depths"].items():
                     print(f"depth {depth}: {','.join(names)}")
+                if d["by_file"]:
+                    print("by file:")
+                    for nfile, items in sorted(d["by_file"].items()):
+                        inline = ", ".join(
+                            f"{it['name']}:{it['line']}" for it in items)
+                        print(f"  {nfile}: {inline}")
                 if d["hint"]:
                     print(f"({d['hint']})")
+                if multi:
+                    print()
         emit(res, render_impact)
     elif a.verb == "globals":
         gcands = node_candidates(con, a.arg, ["global"])
