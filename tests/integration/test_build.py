@@ -299,6 +299,62 @@ class TestIncremental(unittest.TestCase):
 
 
 @unittest.skipUnless(tools_ok(), "needs cscope + universal-ctags on PATH")
+class TestMultiDbAndMetadata(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.mkdtemp()
+        self.root = os.path.join(self.tmp, "mp")
+        shutil.copytree(FIXTURE, self.root)
+
+    def tearDown(self):
+        shutil.rmtree(self.tmp)
+
+    def test_module_map_fills_nodes(self):
+        mm = os.path.join(self.root, "module_mapping.csv")
+        with open(mm, "w", encoding="utf-8") as fh:
+            fh.write("^UTIL,核心\n^sub1/,設定\n")
+        db = os.path.join(self.root, ig.DB_NAME)
+        ig.build(self.root, db, jobs=4, module_map=mm)
+        con = sqlite3.connect(db)
+        self.assertEqual(con.execute(
+            "SELECT module FROM nodes WHERE qname='add'").fetchone()[0], "核心")
+        self.assertEqual(con.execute(
+            "SELECT module FROM nodes WHERE name='cfg_get'").fetchone()[0],
+            "設定")
+        self.assertEqual(con.execute(
+            "SELECT module FROM nodes WHERE qname='main'").fetchone()[0], "")
+        con.close()
+
+    def test_history_appends_across_rebuilds(self):
+        db = os.path.join(self.root, ig.DB_NAME)
+        ig.build(self.root, db, jobs=4)
+        with open(os.path.join(self.root, "util.c"), "a") as fh:
+            fh.write("\nint hist_probe(void) { return 0; }\n")
+        ig.build(self.root, db, jobs=4, incremental=True)
+        con = sqlite3.connect(db)
+        hist = json.loads(con.execute(
+            "SELECT value FROM meta WHERE key='history'").fetchone()[0])
+        con.close()
+        self.assertEqual([h["action"] for h in hist],
+                         ["build-full", "build-incremental"])
+        label = sqlite3.connect(db).execute(
+            "SELECT value FROM meta WHERE key='db_label'").fetchone()[0]
+        self.assertEqual(label, "graph.db")
+
+    def test_named_db_gets_own_clink_sidecars(self):
+        import shutil as sh
+        clink = os.environ.get("CCODEGRAPH_CLINK", "clink")
+        if not sh.which(clink):
+            self.skipTest("needs clink")
+        db = os.path.join(self.root, ".ccodegraph", "cfgA.db")
+        ig.build(self.root, db, jobs=4)
+        ig.clink_import(self.root, db)
+        pdir = os.path.join(self.root, ".ccodegraph")
+        self.assertTrue(os.path.exists(os.path.join(pdir, "cfgA.clink.db")))
+        self.assertTrue(os.path.exists(
+            os.path.join(pdir, "cfgA.clink_mode.txt")))
+
+
+@unittest.skipUnless(tools_ok(), "needs cscope + universal-ctags on PATH")
 class TestCoChanges(unittest.TestCase):
     def test_git_co_change_edges(self):
         tmp = tempfile.mkdtemp()

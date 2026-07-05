@@ -199,6 +199,12 @@ SELECT DISTINCT n.qname FROM inc JOIN nodes n ON n.id=inc.id;
 
 - **Graph first, grep last.** Ask the graph, then Read the exact `file:line` it
   cites. Reversing the order is what burns tokens (measured 13–90×).
+- **This file is the complete reference** — no need to run `--help` or read the
+  tool's source code (measured A/B: that self-verification was the main token
+  overhead). Verb output is already deduplicated and labelled: for routine
+  questions use it directly; reserve SQL / `file:line` re-verification for
+  answer-critical cases — when you are about to change code or make a decision
+  based on the answer.
 - Empty result ≠ nothing exists: check `schema` (layer pending? STALE?), the
   blind-spot table, then `--ambiguous` / `--min-conf 0.5`.
 - After editing code: `build --incremental` — the graph is only trustworthy

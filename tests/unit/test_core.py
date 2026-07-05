@@ -374,5 +374,33 @@ class TestToolPath(unittest.TestCase):
         self.assertEqual(ig.tool_path("ctags"), "ctags")
 
 
+class TestModuleMap(unittest.TestCase):
+    def _map(self, content):
+        import tempfile
+        p = os.path.join(tempfile.mkdtemp(), "module_mapping.csv")
+        with open(p, "w", encoding="utf-8") as fh:
+            fh.write(content)
+        return p
+
+    def test_case_insensitive_and_chinese_module(self):
+        rules = ig.load_module_map(self._map(
+            "# comment\n^SRC/UTILS/,工具層\n^src/drivers/,驅動\n"))
+        self.assertEqual(ig.module_of(rules, "src/utils/eloop.c"), "工具層")
+        self.assertEqual(ig.module_of(rules, "SRC/DRIVERS/x.c"), "驅動")
+
+    def test_first_match_wins_and_no_match_empty(self):
+        rules = ig.load_module_map(self._map("utils,A\nutils,B\n"))
+        self.assertEqual(ig.module_of(rules, "src/utils/a.c"), "A")
+        self.assertEqual(ig.module_of(rules, "main.c"), "")
+
+    def test_bad_regex_dies(self):
+        with self.assertRaises(SystemExit):
+            ig.load_module_map(self._map("([bad,X\n"))
+
+    def test_missing_module_column_dies(self):
+        with self.assertRaises(SystemExit):
+            ig.load_module_map(self._map("okregex\n"))
+
+
 if __name__ == "__main__":
     unittest.main()

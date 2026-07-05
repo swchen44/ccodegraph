@@ -279,6 +279,33 @@ def co_change_groups_to_pairs(groups: list[list[str]], cap: int = 20,
     return [(a, b, c) for (a, b), c in cnt.items() if c >= min_count]
 
 
+def load_module_map(path: str) -> list[tuple[re.Pattern[str], str]]:
+    """R8:module_mapping.csv — 欄1 regex(對檔案路徑,英文不分大小寫),
+    欄2 module 名(可中文)。# 開頭行與空行跳過;壞 regex 大聲死(P7)。"""
+    import csv as _csv
+    rules: list[tuple[re.Pattern[str], str]] = []
+    with open(path, newline="", encoding="utf-8") as fh:
+        for i, row in enumerate(_csv.reader(fh), 1):
+            if not row or row[0].strip().startswith("#") or not row[0].strip():
+                continue
+            if len(row) < 2 or not row[1].strip():
+                sys.exit(f"ERROR: module map line {i}: 需要「regex,module」兩欄")
+            try:
+                pat = re.compile(row[0].strip(), re.IGNORECASE)
+            except re.error as e:
+                sys.exit(f"ERROR: module map line {i}: bad regex: {e}")
+            rules.append((pat, row[1].strip()))
+    return rules
+
+
+def module_of(rules: list[tuple[re.Pattern[str], str]], path: str) -> str:
+    """首個命中的 regex 之 module 名;無命中 → 空字串(順序=優先權)。"""
+    for pat, mod in rules:
+        if pat.search(path):
+            return mod
+    return ""
+
+
 # ---------------------------------------------------------------- 外部工具層
 
 CTAGS_INSTALL_HINTS = """ERROR: ccodegraph 需要 Universal Ctags(偵測到:{flavor})
@@ -551,7 +578,7 @@ def make_resolver(con: sqlite3.Connection, defs: list[Def],
 
 
 def build(root: str, db_path: str, jobs: int,
-          incremental: bool = False) -> None:
+          incremental: bool = False, module_map: str | None = None) -> None:
     require_universal_ctags()          # R2:flavor 偵測,非 Universal 大聲死
     try:
         subprocess.run([tool_path("cscope"), "--version"], capture_output=True)
@@ -616,6 +643,7 @@ def build(root: str, db_path: str, jobs: int,
                        and (h in touched or h in deleted
                             or any(include_matches(sp, h) for sp in specs))}
 
+    mm_rules = load_module_map(module_map) if module_map else []
     print("[L0] cscope index + ctags 節點 …")
     cscope_flags = "-bkRu" if (incremental and (touched or deleted)) \
         else "-bkR"   # -u:增量時無條件重建(cscope 吃 mtime 秒級精度,快改看不見)
@@ -653,6 +681,19 @@ def build(root: str, db_path: str, jobs: int,
     print(f"     {n_fn} functions, {n_gv} globals, {n_mc} macros, "
           f"{len(srcs)} files")
 
+    # history 繼承:append-only 寫入日誌跨重建保留(Q1b)
+    old_history: list[dict[str, Any]] = []
+    if os.path.exists(db_path):
+        try:
+            oc = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
+            hrow = oc.execute(
+                "SELECT value FROM meta WHERE key='history'").fetchone()
+            if hrow:
+                old_history = json.loads(hrow[0])
+            oc.close()
+        except sqlite3.Error:
+            pass
+
     # 原子性重建(codex 高風險 1):寫 temp,成功才 os.replace
     tmp_db = db_path + ".building"
     if os.path.exists(tmp_db):
@@ -668,16 +709,20 @@ def build(root: str, db_path: str, jobs: int,
     for d in defs:
         d["id"] = con.execute(
             "INSERT INTO nodes (name,qname,kind,file,line_start,line_end,"
-            "signature,is_static,origin,confidence) VALUES (?,?,?,?,?,?,?,?,?,?)",
+            "signature,is_static,module,origin,confidence) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
             (d["name"], d["qname"], d["kind"], d["file"], d["line_start"],
-             d["line_end"], d.get("signature"), int(d["is_static"]), "ctags",
+             d["line_end"], d.get("signature"), int(d["is_static"]),
+             module_of(mm_rules, str(d["file"])), "ctags",
              CONFIDENCE["ctags"])).lastrowid
     file_ids: dict[str, int] = {}
     for p in srcs:
         rowid = con.execute(
             "INSERT INTO nodes (name,qname,kind,file,line_start,line_end,"
-            "is_static,origin,confidence) VALUES (?,?,?,?,?,?,0,'ctags',1.0)",
-            (os.path.basename(p), p, "file", p, 1, 1)).lastrowid
+            "is_static,module,origin,confidence) "
+            "VALUES (?,?,?,?,?,?,0,?,'ctags',1.0)",
+            (os.path.basename(p), p, "file", p, 1, 1,
+             module_of(mm_rules, p))).lastrowid
         assert rowid is not None
         file_ids[p] = rowid
 
@@ -839,6 +884,16 @@ def build(root: str, db_path: str, jobs: int,
         print("[L5] co_changes skipped — not a git repo(或 git 不可用)")
 
     con.execute("INSERT INTO meta VALUES ('schema_version','2')")
+    con.execute("INSERT INTO meta VALUES ('db_label',?)",
+                (os.path.basename(db_path),))
+    old_history.append({
+        "ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
+        "action": "build-incremental" if incremental else "build-full",
+        "files": len(srcs), "git": (head[:12] if head else None),
+        "module_map": os.path.basename(module_map) if module_map else None,
+        "seconds": round(time.time() - t0, 1)})
+    con.execute("INSERT INTO meta VALUES ('history',?)",
+                (json.dumps(old_history, ensure_ascii=False),))
     con.execute("INSERT INTO meta VALUES ('root',?)", (root,))
     con.execute("INSERT INTO meta VALUES ('engines_run',?)",
                 (json.dumps([{"engine": "ctags+cscope+heuristics",
@@ -947,7 +1002,8 @@ def clink_import(root: str, db_path: str,
                  "安裝:git clone https://github.com/Smattr/clink && cmake …;"
                  "或設 CCODEGRAPH_CLINK=/path/to/clink")
     t0 = time.time()
-    cdb = os.path.join(root, PRODUCTS_DIR, "clink.db")
+    base = os.path.splitext(os.path.basename(db_path))[0]
+    cdb = os.path.join(root, PRODUCTS_DIR, f"{base}.clink.db")
     # L4/D12 compile DB 階梯:--compdb 合併 → root/build 偵測 → 合成(ccq 血統)
     pdir = os.path.join(root, PRODUCTS_DIR)
     cc_dir = None
@@ -985,7 +1041,7 @@ def clink_import(root: str, db_path: str,
             mode = f"synthesized({len(entries)} entries;無真實 -D,單 config 盲點仍在)"
     # 增量語意(#6):clink 自帶每檔 hash 增量——保留 clink.db,重跑
     # clink-import 時它只重解析變更檔;compile-DB 模式變更才全重解析。
-    mode_file = os.path.join(pdir, "clink_mode.txt")
+    mode_file = os.path.join(pdir, f"{base}.clink_mode.txt")
     prev_mode = None
     if os.path.exists(mode_file):
         with open(mode_file) as fh:
@@ -1061,6 +1117,17 @@ def clink_import(root: str, db_path: str,
         "SELECT value FROM meta WHERE key='engines_run'").fetchone()[0])
     engines.append({"engine": "clink", "layer": "R7a+L4", "mode": mode,
                     "seconds": round(time.time() - t0, 1)})
+    hrow = con.execute("SELECT value FROM meta WHERE key='history'").fetchone()
+    hist = json.loads(hrow[0]) if hrow else []
+    hist.append({"ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
+                 "action": "clink-import", "mode": mode,
+                 "seconds": round(time.time() - t0, 1)})
+    if hrow:
+        con.execute("UPDATE meta SET value=? WHERE key='history'",
+                    (json.dumps(hist, ensure_ascii=False),))
+    else:
+        con.execute("INSERT INTO meta VALUES ('history',?)",
+                    (json.dumps(hist, ensure_ascii=False),))
     con.execute("UPDATE meta SET value=? WHERE key='engines_run'",
                 (json.dumps(engines),))
     con.commit()
@@ -1440,6 +1507,9 @@ def q_status(root: str, db: str) -> dict[str, Any]:
                           "mtime": time.strftime("%Y-%m-%d %H:%M",
                                                  time.localtime(st.st_mtime))})
     res["products"] = prods
+    res["databases"] = [str(p["path"]) for p in prods
+                        if str(p["path"]).endswith(".db")
+                        and not str(p["path"]).endswith(".clink.db")]
     if not os.path.exists(db):
         res["artifact"] = None
         res["suggestion"] = f"no graph — run: ccodegraph.py build -p {root}"
@@ -1485,6 +1555,10 @@ def render_status(res: dict[str, Any]) -> None:
         print("skill  : " + "; ".join(sk["installed"]))
     else:
         print(f"skill  : not installed — {sk['hint']}")
+    if res.get("databases"):
+        print("databases: " + "; ".join(res["databases"])
+              + "   (dumpdb --db <f> 看各自 metadata;自訂路徑外的 DB "
+                "status/reset 管不到)")
     print("products:")
     for p in res["products"]:
         print(f"  {p['path']}  {p['size']:,} B  {p['mtime']}")
@@ -1507,6 +1581,45 @@ def render_status(res: dict[str, Any]) -> None:
     print(f"→ {res['suggestion']}")
 
 
+def q_dumpdb(db: str) -> dict[str, Any]:
+    """Q1d:印 DB 完整 metadata——label、schema、寫入歷史(append-only)、
+    各層統計。這是核心資料的身份證(使用者要求)。"""
+    con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+    meta = dict(con.execute("SELECT key, value FROM meta"))
+    res: dict[str, Any] = {
+        "verb": "dumpdb", "path": os.path.abspath(db),
+        "db_label": meta.get("db_label", os.path.basename(db)),
+        "schema_version": meta.get("schema_version"),
+        "root": meta.get("root"),
+        "history": json.loads(meta.get("history", "[]")),
+        "engines_run": json.loads(meta.get("engines_run", "[]")),
+        "manual_src_hash": meta.get("manual_src_hash"),
+        "nodes": dict(con.execute(
+            "SELECT kind, COUNT(*) FROM nodes GROUP BY kind")),
+        "edges": [{"kind": k, "origin": o, "count": c} for k, o, c in
+                  con.execute("SELECT kind, origin, COUNT(*) FROM edges "
+                              "GROUP BY kind, origin")],
+    }
+    con.close()
+    return res
+
+
+def render_dumpdb(res: dict[str, Any]) -> None:
+    print(f"db      : {res['db_label']}  ({res['path']})")
+    print(f"schema  : v{res['schema_version']}   root: {res['root']}")
+    print("history (append-only):")
+    for h in res["history"]:
+        extra = "".join(f" {k}={v}" for k, v in h.items()
+                        if k not in ("ts", "action") and v is not None)
+        print(f"  {h['ts']}  {h['action']}{extra}")
+    if not res["history"]:
+        print("  (pre-history db — rebuild to start the log)")
+    print("nodes   : " + ", ".join(f"{k}={v}" for k, v in res["nodes"].items()))
+    print("edges   :")
+    for e in res["edges"]:
+        print(f"  {e['kind']:10s} [{e['origin']}] {e['count']}")
+
+
 def reset_cmd(root: str) -> None:
     """#4:清掉本專案全部產物(只碰 .ccodegraph/),逐項印出。"""
     pdir = os.path.join(root, PRODUCTS_DIR)
@@ -1525,7 +1638,7 @@ def main() -> None:
     ap.add_argument("--version", action="version",
                     version=f"ccodegraph {VERSION}")
     ap.add_argument("verb", choices=["build", "clink-import", "schema", "skill",
-                                     "status", "reset", "viz",
+                                     "status", "reset", "viz", "dumpdb",
                                      "explore", "callers", "callees",
                                      "impact", "globals", "vars-of",
                                      "who-includes", "co-changed", "sql"])
@@ -1547,6 +1660,9 @@ def main() -> None:
                     help="viz:html3d(預設)|html2d")
     ap.add_argument("--focus", help="viz:BFS 聚焦符號(name 或 qname)")
     ap.add_argument("--out", help="viz:輸出檔(預設 .ccodegraph/graph-<dim>.html)")
+    ap.add_argument("--module-map",
+                    help="R8:module_mapping.csv(regex,module;英文不分大小寫)"
+                         "— build 時填 nodes.module,viz 依 module 分群")
     ap.add_argument("--full", action="store_true",
                     help="viz:嵌入全部 8 種邊(預設只嵌呼叫家族)")
     ap.add_argument("--json", action="store_true",
@@ -1565,7 +1681,7 @@ def main() -> None:
             sys.exit(f"ERROR: SKILL.md not found at {p}")
         return None
     if a.verb == "build":
-        return build(root, db, a.jobs, a.incremental)
+        return build(root, db, a.jobs, a.incremental, a.module_map)
     if a.verb == "clink-import":
         return clink_import(root, db, a.compdb)
     if a.verb == "status":
@@ -1580,6 +1696,15 @@ def main() -> None:
     if a.verb == "viz":
         return viz_cmd(root, db, a.format, a.focus, a.depth, a.out,
                        a.full, a.min_conf)
+    if a.verb == "dumpdb":
+        if not os.path.exists(db):
+            sys.exit(f"ERROR: no graph at {db}")
+        res_d = q_dumpdb(db)
+        if a.json:
+            print(json.dumps(res_d, ensure_ascii=False))
+        else:
+            render_dumpdb(res_d)
+        return None
     if not os.path.exists(db):
         sys.exit(f"ERROR: no graph at {db} — run: ccodegraph.py build -p {root}")
     if a.verb not in ("schema",) and not a.arg:

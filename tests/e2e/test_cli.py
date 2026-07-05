@@ -270,6 +270,18 @@ class TestCLI(unittest.TestCase):
         self.assertIn("build", r.stdout + r.stderr)
         shutil.rmtree(tmp2)
 
+    def test_dumpdb_metadata(self):
+        out = self.run_cli("dumpdb")
+        self.assertIn("db      : graph.db", out)
+        self.assertIn("history (append-only):", out)
+        self.assertIn("build-full", out)
+        self.assertIn("schema  : v2", out)
+
+    def test_status_lists_databases(self):
+        out = self.run_cli("status")
+        self.assertIn("databases:", out)
+        self.assertIn("graph.db", out)
+
     def test_sql_escape_hatch(self):
         out = self.run_cli("sql", "SELECT COUNT(*) FROM nodes")
         self.assertGreater(int(out.strip()), 5)
