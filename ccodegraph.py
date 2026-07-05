@@ -303,7 +303,7 @@ def ctags_defs(root: str) -> list[Def]:
     static 用定義行文字偵測(近似,documented)。"""
     out = run_checked(["ctags", "-R", "--languages=C,C++",
                        "--kinds-C=f,v,d", "--kinds-C++=f,v,d",
-                       "--fields=+ne", "--output-format=json", "."], root)
+                       "--fields=+neS", "--output-format=json", "."], root)
     src_cache: dict[str, list[str]] = {}
     defs: list[Def] = []
     for raw in out.splitlines():
@@ -329,6 +329,7 @@ def ctags_defs(root: str) -> list[Def]:
             "name": o["name"], "kind": kind, "file": path,
             "line_start": line, "line_end": int(o.get("end", line)),
             "is_static": detect_static(src_cache[path], line),
+            "signature": o.get("signature"),
         })
     return defs
 
@@ -507,9 +508,9 @@ def build(root: str, db_path: str, jobs: int) -> None:
     for d in defs:
         d["id"] = con.execute(
             "INSERT INTO nodes (name,qname,kind,file,line_start,line_end,"
-            "is_static,origin,confidence) VALUES (?,?,?,?,?,?,?,?,?)",
+            "signature,is_static,origin,confidence) VALUES (?,?,?,?,?,?,?,?,?,?)",
             (d["name"], d["qname"], d["kind"], d["file"], d["line_start"],
-             d["line_end"], int(d["is_static"]), "ctags",
+             d["line_end"], d.get("signature"), int(d["is_static"]), "ctags",
              CONFIDENCE["ctags"])).lastrowid
     file_ids: dict[str, int] = {}
     for p in srcs:
@@ -656,7 +657,7 @@ def build(root: str, db_path: str, jobs: int) -> None:
     print(f"done: {db_path}  ({len(defs) + len(srcs)} nodes; edges: "
           + ", ".join(f"{k}={v}" for k, v in sorted(counts.items()))
           + f"; {time.time() - t0:.0f}s)")
-    print("note: L2(treesitter)/L4(clangd)/L5(git)尚未填 — "
+    print("note: 語意層跑 `clink-import`(選配);L5(git)尚未填 — "
           "`schema` 動詞會列出空格子。")
 
 
@@ -696,8 +697,19 @@ def clink_import(root: str, db_path: str) -> None:
     cdb = os.path.join(root, PRODUCTS_DIR, "clink.db")
     if os.path.exists(cdb):
         os.remove(cdb)
-    print("[R7a] clink -b(libclang 解析)…")
-    run_checked([CLINK_BIN, "-b", "--database", cdb, "."], root)
+    # L4:有 compile DB → config 精確視角,信心升 0.95(design §1.5)
+    cc_dir = None
+    for cand in (root, os.path.join(root, "build")):
+        if os.path.exists(os.path.join(cand, "compile_commands.json")):
+            cc_dir = cand
+            break
+    conf = 0.95 if cc_dir else CONFIDENCE["clink"]
+    mode = f"compile-DB({cc_dir})" if cc_dir else "no-build fallback"
+    print(f"[R7a/L4] clink -b(libclang,{mode},conf {conf})…")
+    cmd = [CLINK_BIN, "-b", "--database", cdb]
+    if cc_dir:
+        cmd += ["--compile-commands", cc_dir]
+    run_checked([*cmd, "."], root)
 
     con = sqlite3.connect(db_path)
     fn_index, gv_index = load_graph_indexes(con)
@@ -726,21 +738,38 @@ def clink_import(root: str, db_path: str) -> None:
                 con.execute(
                     "INSERT OR IGNORE INTO edges (src,dst,kind,file,line,"
                     "origin,confidence,meta) VALUES (?,?,?,?,?,'clink',?,?)",
-                    (src["id"], dst["id"], kind, path, line,
-                     CONFIDENCE["clink"], meta))
+                    (src["id"], dst["id"], kind, path, line, conf, meta))
                 if kind == "calls":
                     n_calls += 1
                 else:
                     n_writes += 1
+    # L4/D3 註記:語意引擎的 confirmed/absent 寫進 meta,不動 confidence
+    #(D3 重估結論:維持 meta-only——「clangd 說沒有」在 #ifdef 情境是線索
+    # 不是裁決,判讀交給 LLM;使用者 2026-07-05 裁決不變)
+    n_conf, n_abs = 0, 0
+    con.execute("""CREATE TEMP TABLE clink_pairs AS
+        SELECT DISTINCT src, dst, kind FROM edges WHERE origin='clink'""")
+    cur = con.execute("""UPDATE edges SET meta = json_set(meta,
+          '$.semantic', CASE WHEN EXISTS (SELECT 1 FROM clink_pairs cp
+              WHERE cp.src=edges.src AND cp.dst=edges.dst AND cp.kind=edges.kind)
+            THEN 'confirmed' ELSE 'absent' END,
+          '$.semantic_by', 'clink')
+        WHERE origin='cscope' AND kind IN ('calls','writes')""")
+    n_ann = cur.rowcount
+    n_conf = con.execute("SELECT COUNT(*) FROM edges WHERE origin='cscope' "
+                         "AND instr(meta,'\"semantic\":\"confirmed\"')"
+                         ">0").fetchone()[0]
+    n_abs = n_ann - n_conf
     engines = json.loads(con.execute(
         "SELECT value FROM meta WHERE key='engines_run'").fetchone()[0])
-    engines.append({"engine": "clink", "layer": "R7a",
+    engines.append({"engine": "clink", "layer": "R7a+L4", "mode": mode,
                     "seconds": round(time.time() - t0, 1)})
     con.execute("UPDATE meta SET value=? WHERE key='engines_run'",
                 (json.dumps(engines),))
     con.commit()
     print(f"done: +calls={n_calls}, +writes={n_writes} (origin=clink, "
-          f"conf {CONFIDENCE['clink']}); dropped(no-src)={n_drop}; "
+          f"conf {conf}); dropped(no-src)={n_drop}; "
+          f"semantic 註記: confirmed={n_conf}, absent={n_abs}; "
           f"{time.time() - t0:.0f}s")
 
 
@@ -762,8 +791,8 @@ def fmt_tags(origins: str, meta_json: str | None) -> str:
         m = {}
     if m.get("ambiguous"):
         tags.append(f'ambiguous {m.get("candidates", "?")} candidates')
-    if "clangd" in m:
-        tags.append(f'clangd:{m["clangd"]}')
+    if "semantic" in m:
+        tags.append(f'semantic:{m["semantic"]}')
     return "[" + "; ".join(tags) + "]"
 
 

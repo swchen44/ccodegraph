@@ -205,6 +205,11 @@ class TestBuildMiniproj(unittest.TestCase):
         self.assertEqual(kind[0], "macro")
         self.assertIn(("add", "MAX2"), self.pairs("expands"))
 
+    def test_signature_filled(self):
+        sig = self.con.execute(
+            "SELECT signature FROM nodes WHERE qname='add'").fetchone()[0]
+        self.assertIn("int a", sig or "")
+
     # ---- views / meta ----
 
     def test_edge_pairs_view_aggregates(self):
@@ -267,6 +272,27 @@ class TestClinkImport(unittest.TestCase):
             "SELECT COUNT(*) FROM edges WHERE origin='clink'").fetchone()[0]
         con2.close()
         self.assertEqual(before, after)
+
+    def test_semantic_confirmed_on_real_edge(self):
+        # L4/D3:cscope 邊被語意引擎確認 → meta.semantic=confirmed
+        meta = self.con.execute(
+            "SELECT e.meta FROM edges e JOIN nodes n1 ON n1.id=e.src "
+            "JOIN nodes n2 ON n2.id=e.dst WHERE n1.name='main' "
+            "AND n2.name='add' AND e.origin='cscope'").fetchone()[0]
+        self.assertIn('"semantic":"confirmed"', meta.replace(" ", ""))
+
+    def test_semantic_absent_on_inactive_ifdef(self):
+        # gated.c:#ifdef FEATURE_X 未定義 → cscope 看得到、libclang 看不到
+        meta = self.con.execute(
+            "SELECT e.meta FROM edges e JOIN nodes n1 ON n1.id=e.src "
+            "JOIN nodes n2 ON n2.id=e.dst WHERE n1.name='gated' "
+            "AND n2.name='rarely' AND e.origin='cscope'").fetchone()[0]
+        self.assertIn('"semantic":"absent"', meta.replace(" ", ""))
+        # D3:confidence 不因 absent 降級
+        conf = self.con.execute(
+            "SELECT e.confidence FROM edges e JOIN nodes n1 ON n1.id=e.src "
+            "WHERE n1.name='gated' AND e.origin='cscope'").fetchone()[0]
+        self.assertEqual(conf, 0.90)
 
     def test_engines_run_appended(self):
         engines = json.loads(self.con.execute(

@@ -136,6 +136,17 @@ class TestCLI(unittest.TestCase):
             with open(fp, "w") as fh:
                 fh.write(content.rstrip() + "\n")
 
+    def test_semantic_tag_shown_after_clink(self):
+        import shutil as sh
+        clink = os.environ.get("CCODEGRAPH_CLINK", "clink")
+        if not sh.which(clink):
+            self.skipTest("needs clink")
+        r = subprocess.run([sys.executable, CLI, "clink-import", "-p",
+                            self.root], capture_output=True, text=True)
+        assert r.returncode == 0, r.stdout + r.stderr
+        out = self.run_cli("callers", "rarely")
+        self.assertIn("semantic:absent", out)
+
     def test_macro_callers(self):
         out = self.run_cli("callers", "MAX2")
         self.assertIn("add", out)

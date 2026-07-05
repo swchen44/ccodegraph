@@ -104,7 +104,7 @@ C++ 補充(W3 輕量策略,L2+ 才填):`class` `method` `namespace` 以 best-eff
 | callback / fnptr | L3 | 0.70 / 0.80 | ✅(0.70 為 provisional,precision suite 後重估) |
 | manual | L3b | 1.00(語意 = asserted_by_user;fnptr.json sha256 進 meta,schema 動詞偵測 stale) | ✅ |
 | treesitter | L2 | 0.85 | ⬜ |
-| clangd / clangd-nobuild | L4 | 0.95 / 0.75 | ⬜ |
+| clangd / clangd-nobuild | L4 備用 | 0.95 / 0.75 | 保留(L4 已由 clink 交付) |
 | git | L5 | 0.50 | ⬜ |
 | clink | R7a | 0.93(no-build libclang;單 config 視角同 clangd) | ✅ 選配 |
 | (未來)asm-flow 等 | — | 進場時定 | 註冊表開放 |
@@ -114,7 +114,7 @@ confidence 語意:**產生引擎的固有準確率之初始預設值**(來源 = 
 
 **edges.meta 合法鍵(封閉集合,v1)**:`ambiguous`(bool)`candidates`(int)
 `rule`(`non-static-dup`|`dup-basename`)`heur`(`fn-as-arg`)`field`(str)
-`handlers`(int)`rmw`(bool)`manual`(bool)`struct`(str,registration 的結構名)`clangd`(`confirmed`|`absent`,L4)。
+`handlers`(int)`rmw`(bool)`manual`(bool)`struct`(str,registration 的結構名)`semantic`(`confirmed`|`absent`,L4 語意引擎逐對驗證)`semantic_by`(str,目前=clink)。
 stale 不是邊上的鍵——由 `schema` 動詞比對 meta.manual_src_hash 與現行 fnptr.json 即時判定。新增鍵必須先登記於此。
 
 **volatile 欄(normalized diff 排除)**:`meta.created_at`、`files.indexed_at`、
@@ -360,7 +360,7 @@ vs 使用者原話「查詢層等 DB 完整後」)。測試缺口 T1-T8 入 road
 | R2 | ctags 跨平台相容:flavor 偵測(universal/exuberant/bsd)+ 非 Universal 大聲死附三平台安裝指引;CI 矩陣 ubuntu/macos/windows(windows 為 lint+unit,cscope 難裝) | ✅ 2026-07-05 | classify_ctags 純函式 + 4 unit tests;.github/workflows/ci.yml |
 | L2 | tree-sitter 聯集 | ❌ 除役(D11,證據見 §8.5.1) | Universal ctags 5/7 全收 ts 贏過的場景 |
 | L2′ | macro 維度:macro 節點 + expands 邊 | ✅ 2026-07-05 | wpa:3814 macros、29739 expands;GT 28/28 不退;92 tests |
-| L4 | clangd 升級層(confirmed/absent 註記、signature、uses_type;需 compile DB) | ⬜ | D3 在此重估 |
+| L4 | 語意註記層 | ✅ 2026-07-05(經 clink 交付,不驅動 clangd LSP) | signature 由 ctags +S 全填(wpa 9528/9528);clink 匯入時對 cscope calls/writes 逐對標 `semantic: confirmed\|absent`(wpa 70905/1091);有 compile DB 時 clink conf 升 0.95。**D3 重估結論:維持 meta-only**——absent 在 #ifdef 情境是線索不是裁決。clangd LSP origin 保留備用(precision suite 若顯示 clink 不足再啟) |
 | L5 | git 層(co_changes 邊 + content_hash 增量;改 1 檔 <5s、圖 diff=0) | ⬜ | |
 | R4 | **查詢層設計(獨立階段,L0–L5 完整後)**:LLM 導向動詞 + SKILL.md(沿用 ccq 經驗:token 形狀、分節、標籤、schema 自省為第一動詞)——「重點是讓大語言模型知道如何使用」 | ⬜ 等完整 DB | 現有動詞是工程驗證用,非最終介面 |
 | R5 | VS Code plugin(友善 UI 讀同一份 graph.db) | ⬜ 最後 | 應用層;DB 是唯一事實來源,plugin 只是另一個 reader |
