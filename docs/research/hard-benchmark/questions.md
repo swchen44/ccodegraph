@@ -2,8 +2,8 @@
 
 > 機器可讀版:`questions.jsonl`。分類架構:`taxonomy.md`。
 
-> `★ EXECUTED` 標記的 4 題是本輪真跑(headless Claude Code A/B),其餘 18 題是文件化題庫,
-留待未來擴充/驗證,本輪不執行。
+> `★ EXECUTED` 標記的 4 題是本輪真跑(headless Claude Code A/B),結果與評分見
+`../llm-ab-v2-hard-cases.md`。其餘 18 題是文件化題庫,留待未來擴充,本輪不執行。
 
 
 ## symbol-definition
@@ -152,7 +152,9 @@
 
 **Expected schema**: function_list_with_gate_type
 
-**Evaluation notes**: Full GT (docs/research/hard-benchmark/taxonomy.md + this session's grep+ccodegraph derivation): 19 whole-gated functions across wpa_supplicant/sme.c and src/ap/ieee802_11.c (index_within_array, sme_set_sae_group, sme_auth_build_sae_commit, sme_auth_build_sae_confirm, sme_sae_auth, auth_build_sae_commit, auth_build_sae_confirm, auth_sae_send_commit, auth_sae_send_confirm, use_sae_anti_clogging, check_sae_token, auth_build_token_req, sae_check_big_sync, auth_sae_retransmit_timer, sae_clear_retransmit_timer, sae_set_retransmit_timer, sae_sm_step, handle_auth_sae, auth_sae_init_committed) + 13 partial-gated functions across 8 files (sme_send_authentication, sme_authenticate, sme_event_auth, sme_event_assoc_reject, sme_clear_on_disassoc, handle_auth, check_assoc_ies, hostapd_ctrl_iface_sta_mib, wpa_write_rsn_ie, wpa_validate_wpa_ie, ap_free_sta, rsn_key_mgmt_to_bitfield, hostapd_wpa_auth_get_psk, wpa_gen_wpa_ie_rsn). Score 3 = finds both categories and the whole/partial distinction; score 2 = finds most whole-gated ones (the easier half, roughly matching #ifdef line-count grep) but misses most partial-gated ones (requires reading function bodies, not just counting #ifdef occurrences); score 1 = only checks 1-2 files instead of the whole src/ tree.
+**Evaluation notes**: GT CORRECTED 2026-07-06 after the real A/B run exposed the original GT as incomplete (see docs/research/llm-ab-v2-hard-cases.md — both arms independently found a gating mechanism the original GT missed). TRUE whole-gated count = 54, not 19: 35 functions in src/common/sae.c (the ENTIRE file is Makefile-gated — wpa_supplicant/Makefile:241-243 `ifdef CONFIG_SAE ... OBJS += ../src/common/sae.o ... endif` — so if CONFIG_SAE were undefined, sae.c would never be compiled/linked at all) + 14 in src/ap/ieee802_11.c (single contiguous #ifdef block, lines 318-876) + 5 in wpa_supplicant/sme.c (index_within_array, sme_set_sae_group, sme_auth_build_sae_commit, sme_auth_build_sae_confirm, sme_sae_auth — each individually wrapped in its own #ifdef/#endif, verified by direct source inspection). Partial-gated: 13-14 functions across 8 files, ALSO including sme.c ones (sme_send_authentication, sme_authenticate, sme_event_auth, sme_event_assoc_reject, sme_clear_on_disassoc) that both arms in the actual run missed. Score 3 requires finding BOTH the Makefile-level whole-file gate (sae.c) AND the inline #ifdef gates across ALL THREE files (sme.c, ieee802_11.c, plus the 8 partial-gated files) — not just the two most conspicuous ones. Score 2 = finds the Makefile mechanism and ieee802_11.c but misses sme.c entirely (this is what both arms scored in the actual run, and — instructively — what the original hand-built GT also missed on the first pass).
+
+**GT correction record**: Original evaluation_notes (pre-correction) only covered inline #ifdef in sme.c+ieee802_11.c (19 whole), missing the Makefile whole-file gate for sae.c (35 more). Kept here for the record.
 
 **Purpose(驗證目的)**: 真跑題,四題中設計目的最明確的一題:直接檢驗 ccodegraph 語意層(semantic:confirmed|absent)對條件編譯的誠實標記能力,以及 grep 對巢狀 #ifdef 邊界判斷、行號到函式歸戶的已知弱點。
 
