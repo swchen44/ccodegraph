@@ -1,10 +1,14 @@
-# R4 驗收 v2:硬題 A/B(真 Claude Code headless,N=1,2026-07-06)
+# R4 驗收 v2:硬題 A/B(真 Claude Code headless,N=1,2026-07-06;Arm C 於 2026-07-07 補做)
 
 > 動機:使用者對第一輪 5 題 A/B(`llm-ab.md`)的反饋——「太簡單,認不出差別」。
 > 仿 `linux-kernel-navigation-benchmark` 的分類法為 wpa_supplicant/redis 出了
 > 22 題難題庫(`docs/research/hard-benchmark/`,12 類適配、L1–L4),挑 4 題
 > 最難的(L3/L4,涵蓋多跳呼叫鏈、136 欄位大型 ops table、條件編譯函式層級歸戶、
-> 資料流生命週期)用真 **Claude Code headless mode** 跑,不是 codex。
+> 資料流生命週期)用真 **Claude Code headless mode** 跑,不是 codex。看完
+> 這輪結果後,使用者又提出 5 個常見問題(GT 定義/來源、題目原文不清楚、
+> 三方 compile DB 對照、N=3 的意義、能否從證據歸納改進方向而不寫死程式碼)
+> 與一個假設(ccodegraph 是不是被當 grep 用),下方逐一補上回答與新增的
+> Arm C(redis 真實 compile_commands.json)對照實驗。
 
 ## 常見問題(先回答,再看方法論)
 
@@ -214,6 +218,53 @@ B 臂沒有邊可查,只能跟 A 臂一樣退化成讀檔/grep——這正是 WR
 「ccodegraph 有沒有用」,是「這題的知識有沒有被 ccodegraph 建模」**。
 這個結論本身也直接指向下一節的改進方向。
 
+## Arm C:redis 真實 compile_commands.json 三方對照(2026-07-07 補做)
+
+使用者提出第三個問題:「有沒有跟正確的 `compile_commands.json` 比較過?」
+——上面 Arm B 用的其實是 ccodegraph 在**沒有真實建置產物**時的合成
+compile DB(confidence 0.93,無真實 `-D`/`-I`,單一組態盲點)。redis 這邊
+剛好留有一份先前用 `bear` 真實建置產生的 `compile_commands.json`
+(357 entries,含正確的 `-D`/`-I`/`-std` 等旗標),於是新增 **Arm C**:
+其餘條件與 Arm B 完全相同(乾淨複本、專案層 skill、預先 build),唯一差異是
+把這份真實 DB 放進複本根目錄再跑 `build`+`clink-import`——`status`/
+`clink-import` 的偵測邏輯(`ccodegraph.py:1290-1296`)會自動採用
+`root/compile_commands.json`,confidence 提升到 0.95。範圍依使用者指定
+(「先只做 redis 的 2 題」):只跑 WRQ-008、WRQ-017,wpa 沒有真實建置產物
+(需要 openssl-dev/libnl-dev 等依賴),故不在此列,列為未來工作。
+
+| 題 | A(無 ccodegraph) | B(ccodegraph + 合成 DB,0.93) | C(ccodegraph + 真實 DB,0.95) |
+|---|---|---|---|
+| WRQ-008 | 3 分 / $0.55 / 18 turns / 149s / 17 次 bash | 3 分 / $0.48 / 9 turns / 104s / 6 次 bash | 3 分 / $0.48 / 10 turns / 91s / **7 次 bash**(含 1 條 SQL) |
+| WRQ-017 | 3 分 / $0.41 / 10 turns / 65s / 5 次 bash | 3 分 / $0.55 / 14 turns / 111s / 4 次 bash(含 1 條 SQL JOIN) | 3 分 / $0.61 / 15 turns / 122s / **4 次 bash**(含 1 條 SQL JOIN) |
+
+**逐項核對後,C 臂兩題答案與 B 臂實質相同**:WRQ-008 一樣完整追出
+`processCommand → lookupCommand → call → c->cmd->proc(c)(commands.def
+fnptr dispatch) → setCommand → setGenericCommand → setKeyByLink →
+dbAddByLink/dbSetValue → dbAddInternal → kvstoreDictSetAtLink`,每一跳都
+標注 `[cscope,clink; semantic:confirmed]`;WRQ-017 一樣答出 6 個本函式內
+釋放 + 4 個所有權轉移給資料庫,連分類、變數名稱、行號都與 B 臂逐項吻合。
+兩題所用的 ccodegraph 指令招式也高度相似(WRQ-008 都用
+`explore`/`callers`/`sql` 組合;WRQ-017 都以一條 SQL `JOIN` 查詢為主,
+輔以少量 grep 覆核),差異只在呼叫次數 ±1、cost/turns/time 在個位數
+百分比內浮動(且已知 N=1 本身變異數不小,見前面「N=3」說明,不能只憑
+這兩題的數字就說 C 比 B 慢或快)。
+
+**誠實結論:對這 2 題而言,真實 compile_commands.json 沒有帶來可觀察到的
+正確性或技巧差異**——合成 DB 雖然沒有真實 `-D`/`-I`,但 clink 對這兩題
+牽涉到的檔案(`server.c`/`t_string.c`/`db.c`)解析出的呼叫關係已經與
+cscope 一致(`semantic:confirmed`),兩者本來就沒有分歧可讓真實 DB 去仲裁。
+**這不代表真實 compile DB 普遍沒有價值**——它的價值在使用者原本就點出的
+「單一組態盲點」:當程式碼有大量 `#ifdef CONFIG_*`/巨集依賴不同 `-D` 而
+編譯出不同內容時(例如 wpa_supplicant 的 CONFIG_SAE 之類條件編譯,或
+redis 自己的 `USE_JEMALLOC` 等旗標),合成 DB 只能猜一組固定的巨集展開,
+可能與 grep/clink 對其他組態下的程式碼產生分歧;而這兩題剛好都落在
+**沒有巨集/組態分支的直線呼叫鏈或資料流路徑上**,不是這種盲點會發作的
+題型。換句話說:這次驗證確認了「合成 DB 對呼叫鏈類題目已經夠用」,但
+**沒有**驗證到「合成 DB 在條件編譯密集的程式碼上是否會出錯」——那才是
+真實 DB 真正該發揮的場景,而 wpa 的真實建置(WRQ-013 那類題目)正是這種
+場景,可惜目前還沒有真實建置產物可供對照,留待未來取得 wpa 真實
+`compile_commands.json` 後再做這組對照,才能真正驗證使用者的假設。
+
 ## 改進方向(從這次證據歸納,刻意不寫進 ccodegraph 程式碼)
 
 以下是根據上面的證據整理出的、**可能有價值的一般化改進方向**,故意只留在
@@ -257,3 +308,11 @@ B 臂沒有邊可查,只能跟 A 臂一樣退化成讀檔/grep——這正是 WR
   還有第三種 CONFIG_SAE 閘控機制我依然沒發現(例如 header 裡的巢狀巨集)。
   這正是這套 benchmark 想揭露的問題本質:C 語言條件編譯的完整性驗證極難
   窮盡,連反覆核對的人類都可能低估其複雜度。
+- Arm C(真實 compile_commands.json)**只做了 redis 的 2 題**,且剛好是
+  兩題都不涉及條件編譯/巨集展開的直線呼叫鏈與資料流路徑——這是使用者
+  明確選定的範圍(「先只做 redis 的 2 題」),不是能力不足。wpa 的真實
+  `compile_commands.json`(需要先裝 openssl-dev/libnl-dev 等依賴跑一次真實
+  build)以及最可能讓「合成 vs 真實 DB」出現分歧的 WRQ-013 這類條件編譯題,
+  都還沒有用真實 DB 對照過,留作未來工作(harness:`tools/run_hard_ab_armc.py`,
+  目前只掃 `CASES` 裡的 2 個 redis 題,要加 wpa 只需在有真實 build 產物後
+  補上對應 case)。
