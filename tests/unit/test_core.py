@@ -402,5 +402,16 @@ class TestModuleMap(unittest.TestCase):
             ig.load_module_map(self._map("okregex\n"))
 
 
+class TestEmbeddedSkill(unittest.TestCase):
+    def test_embedded_matches_file(self):
+        # SKILL 內嵌於 ccodegraph.py(單檔可輸出);與 skills/ 檔案必須一致。
+        # 改了 SKILL.md 卻沒跑 tools/embed_skill.py → 這裡紅。
+        p = os.path.join(os.path.dirname(os.path.dirname(
+            os.path.dirname(os.path.abspath(__file__)))),
+            "skills", "ccodegraph", "SKILL.md")
+        with open(p, encoding="utf-8") as fh:
+            self.assertEqual(ig.SKILL_MD, fh.read())
+
+
 if __name__ == "__main__":
     unittest.main()

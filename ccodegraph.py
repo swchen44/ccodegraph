@@ -15,6 +15,7 @@ impact 預設不走(--ambiguous 全開);查詢預設門檻 confidence >= 0.7。
 from __future__ import annotations
 
 import argparse
+import base64
 import concurrent.futures as cf
 import hashlib
 import json
@@ -33,6 +34,243 @@ CscopeRow = tuple[str, str, int, str]   # (field2, file, line, text)
 
 PRODUCTS_DIR = ".ccodegraph"          # 所有中間產物集中此處(ccq 經驗:不污染使用者空間)
 DB_NAME = os.path.join(PRODUCTS_DIR, "graph.db")
+
+# --- EMBEDDED_SKILL_BEGIN(由 tools/embed_skill.py 生成,勿手改)---
+_SKILL_B64 = (
+    "LS0tCm5hbWU6IGNjb2RlZ3JhcGgKZGVzY3JpcHRpb246IFVzZSB3aGVuIG5hdmlnYXRpbmcgb3Ig"
+    "cmVmYWN0b3JpbmcgYSBDL0MrKyBjb2RlYmFzZSDigJQgd2hvIGNhbGxzIGEgZnVuY3Rpb24sIHdo"
+    "YXQgaXQgY2FsbHMsIHdobyByZWFkcy9XUklURVMgYSBnbG9iYWwsIHdobyB1c2VzIGEgbWFjcm8s"
+    "IGltcGFjdCBvZiBhIGNoYW5nZSwgZm4tcG9pbnRlci9jYWxsYmFjayBkaXNwYXRjaCwgZmlsZXMg"
+    "aW5jbHVkaW5nIGEgaGVhZGVyLCBvciBmaWxlcyB0aGF0IGhpc3RvcmljYWxseSBjaGFuZ2UgdG9n"
+    "ZXRoZXIuIFRyaWdnZXJzIG9uICLoqrDlkbzlj6siLCAid2hvIGNhbGxzIiwgImNhbGxlcnMgb2Yi"
+    "LCAi6Kqw5pS56YCZ5YCL5YWo5Z+fIiwgIndobyB3cml0ZXMiLCAiaW1wYWN0IG9mIiwgIueIhueC"
+    "uOWNiuW+kSIsICLlt6jpm4blk6roo6HnlKgiLCAiI2lmZGVmIOmAmeauteacieS6uueUqOWXjiIs"
+    "ICJjby1jaGFuZ2UiLCBvciBhbnkgdGFzayBuZWVkaW5nIG1hbnkgZ3JlcC9SZWFkIGNhbGxzIG92"
+    "ZXIgQy9DKysuIFdvcmtzIHdpdGggWkVSTyBidWlsZCAobm8gY29tcGlsZV9jb21tYW5kcy5qc29u"
+    "IG5lZWRlZCk7IGEgY29tcGlsZSBEQiBvciBjbGluayBvbmx5IHVwZ3JhZGVzIHByZWNpc2lvbi4g"
+    "RXZlcnkgYW5zd2VyIGNhcnJpZXMgb3JpZ2luICsgY29uZmlkZW5jZSArIHRhZ3Mg4oCUIFJFQUQg"
+    "VEhFIFJJU0sgQ0hBUFRFUiBiZWZvcmUgdHJ1c3RpbmcgYW55IHNpbmdsZSBlZGdlLiBTY29wZTog"
+    "QyBmaXJzdC1jbGFzczsgQysrIGJlc3QtZWZmb3J0IChzeW1ib2xzIGFuZCBkaXJlY3QgcmVsYXRp"
+    "b25zIHJlY29yZGVkLCBubyB0ZW1wbGF0ZS9vdmVybG9hZCByZXNvbHV0aW9uKS4KLS0tCgojIGNj"
+    "b2RlZ3JhcGgg4oCUIEMvQysrIGtub3dsZWRnZSBncmFwaCBmb3IgYWdlbnRzIChtdWx0aS1lbmdp"
+    "bmUsIGhvbmVzdHktbGFiZWxsZWQpCgpPbmUgU1FMaXRlIGdyYXBoIChgPHJvb3Q+Ly5jY29kZWdy"
+    "YXBoL2dyYXBoLmRiYCkgZmlsbGVkIGJ5IGxheWVyZWQgZW5naW5lcwooY3RhZ3Mg4oaSIGNzY29w"
+    "ZSDihpIgaGV1cmlzdGljcyDihpIgb3B0aW9uYWwgY2xpbmsvbGliY2xhbmcg4oaSIGdpdCksIGV2"
+    "ZXJ5IHJvdyBzdGFtcGVkCndpdGggKipvcmlnaW4gKyBjb25maWRlbmNlICsgdGFncyoqLiBZb3Ug"
+    "ZG8gdGhlIGhpZ2gtbGV2ZWwganVkZ2VtZW50OyB0aGUgZ3JhcGgKZG9lcyB0aGUgbWVjaGFuaWNh"
+    "bCB3b3JrIChhdHRyaWJ1dGlvbiwgZGVkdXAsIGFnZ3JlZ2F0aW9uKS4gTWVhc3VyZWQ6IDEz4oCT"
+    "OTDDlwpmZXdlciBieXRlcyBpbmdlc3RlZCB0aGFuIGdyZXAvUmVhZCBsb29wcyBwZXIgcXVlc3Rp"
+    "b24uCgojIyBUaGUgam91cm5leQoKYGBgCmNjb2RlZ3JhcGgucHkgYnVpbGQgLXAgPHJvb3Q+ICAg"
+    "ICAgICAgICAgIyB6ZXJvLWJ1aWxkOyB+OTBzIGZvciBhIDYwMC1maWxlIHJlcG8KY2NvZGVncmFw"
+    "aC5weSBjbGluay1pbXBvcnQgLXAgPHJvb3Q+ICAgICAjIE9QVElPTkFMIHNlbWFudGljIGxheWVy"
+    "IChuZWVkcyBjbGluayBiaW5hcnkpCuKApiBxdWVyeSB2ZXJicyAocmVwZWF0IGZyZWVseSwgfjEw"
+    "MG1zIGVhY2gpIOKApgooY29kZSBjaGFuZ2VkPykgYnVpbGQgLS1pbmNyZW1lbnRhbCAgICAgICMg"
+    "MS1maWxlIGNoYW5nZSDiiYggNHM7IG5vLW9wIOKJiCA0cyB3aGVuIGFsaWduZWQKICAgICAgICAg"
+    "ICAgICDihpIgdGhlbiByZS1ydW4gY2xpbmstaW1wb3J0ICAgIyBpdCBJUyBpbmNyZW1lbnRhbDog"
+    "Y2xpbmsgcmUtcGFyc2VzIG9ubHkKICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAg"
+    "ICAgICAgICMgY2hhbmdlZCBmaWxlcyAoaXRzIG93biBwZXItZmlsZSBoYXNoKQpgYGAKClRvb2wg"
+    "cGF0aHM6IGBDQ09ERUdSQVBIX3tDVEFHUyxDU0NPUEUsQ0xJTkssR0lUfV9QQVRIYCBlbnYgdmFy"
+    "cyBvdmVycmlkZSB0aGUKc3lzdGVtIFBBVEggbG9va3VwLgoKKipHcmFwaCBmcmVzaG5lc3MqKjog"
+    "c291cmNlLWRyaWZ0IGRldGVjdGlvbiBoYXBwZW5zIGF0IGBidWlsZCAtLWluY3JlbWVudGFsYAoo"
+    "aGFzaCBjb21wYXJpc29uOyBwcmludHMgInVwIHRvIGRhdGUiIHdoZW4gYWxpZ25lZCkg4oCUIGBz"
+    "Y2hlbWFgIGRvZXMgTk9UIGRldGVjdApzb3VyY2UgZHJpZnQ7IGl0cyBTVEFMRSB3YXJuaW5nIGlz"
+    "IHNwZWNpZmljYWxseSBhYm91dCBgZm5wdHIuanNvbmAgKG1hbnVhbAplZGdlcykuIFVuc3VyZSB3"
+    "aGV0aGVyIHRoZSBncmFwaCBpcyBjdXJyZW50PyBSdW4gYGJ1aWxkIC0taW5jcmVtZW50YWxgIGZp"
+    "cnN0IOKAlAppdCBpcyBjaGVhcCBhbmQgZXhhY3QuCgojIyBTdGVwIDAg4oCUIGFsd2F5cyBzdGFy"
+    "dCB3aXRoIGBzY2hlbWFgCgpgYGBiYXNoCmNjb2RlZ3JhcGgucHkgc2NoZW1hIC1wIDxyb290PiBb"
+    "LS1qc29uXQpgYGAKCkl0IHRlbGxzIHlvdTogd2hpY2ggbm9kZS9lZGdlIGtpbmRzIGFyZSBmaWxs"
+    "ZWQgYW5kIGJ5IHdoaWNoIG9yaWdpbiwgaG93IHRoZQpncmFwaCB3YXMgYnVpbHQgKGBlbmdpbmVz"
+    "X3J1bmA6IGZ1bGwvaW5jcmVtZW50YWwsIGNvbXBpbGUtREIgbW9kZToKYGNvbXBpbGUtREIoLi4u"
+    "KWAgLyBgbWVyZ2VkKC4uLilgIC8gYHN5bnRoZXNpemVkKC4uLilgKSwgZm5wdHIuanNvbiAqKlNU"
+    "QUxFCndhcm5pbmdzKiosIGFuZCBwZW5kaW5nIGxheWVycy4gTmV2ZXIgaW50ZXJwcmV0IHJlc3Vs"
+    "dHMgd2l0aG91dCBrbm93aW5nIHdoaWNoCmVuZ2luZXMgYWN0dWFsbHkgcmFuLgoKIyMgVmVyYiBy"
+    "ZWZlcmVuY2UgKGFsbCBzdXBwb3J0IGAtLWpzb25gKQoKU3ltYm9sIGlucHV0IHJ1bGUgKGFsbCB2"
+    "ZXJicyk6IHBhc3MgYSBwbGFpbiAqKm5hbWUqKiAoYGVsb29wX2luaXRgKSBvciBhCioqcW5hbWUq"
+    "KiAoYCdzcmMvdXRpbHMvZWxvb3AuYzo6ZWxvb3BfaW5pdCdgKSDigJQgZXZlcnkgdmVyYiBhY2Nl"
+    "cHRzIGJvdGg7IGEgbmFtZQptYXRjaGluZyBzZXZlcmFsIGRlZmluaXRpb25zIHJldHVybnMgcGVy"
+    "LWRlZmluaXRpb24gc2VjdGlvbnM7IHVzZSB0aGUgcW5hbWUgdG8KcGluIG9uZS4gUXVvdGUgcW5h"
+    "bWVzIGluIHRoZSBzaGVsbCAodGhleSBjb250YWluIGAvYCBhbmQgYDo6YCkuCgp8IFZlcmIgfCBS"
+    "ZXR1cm5zIHwgVXNlIHdoZW4gfAp8LS0tfC0tLXwtLS18CnwgYGV4cGxvcmUgWGAgfCBkZWZpbml0"
+    "aW9uIChzaWduYXR1cmUsIGZpbGU6bGluZSkgKyBjYWxsZXJzICsgY2FsbGVlcyArIGdsb2JhbHMg"
+    "aXQgcmVhZHMvd3JpdGVzIOKAlCBvbmUgc2hvdCB8ICoqZGVmYXVsdCBmaXJzdCBtb3ZlKiogb24g"
+    "YW55IHN5bWJvbCB8CnwgYGNhbGxlcnMgWGAgfCBmdW5jdGlvbi1sZXZlbCBkZWR1cGVkIGNhbGxl"
+    "cnMsIG9uZSBzaXRlICsgYChOIHNpdGVzKWA7ICoqaW5jbHVkZXMgYFtmbnB0cl1gL2BbY2FsbGJh"
+    "Y2tdYC10YWdnZWQgaW5kaXJlY3QgY2FsbGVycyBhbmQgbWFjcm8gdXNlcnMqKiB8IHdobyBjYWxs"
+    "cyAvIHdobyBtaWdodCBkaXNwYXRjaCB0byBYIHwKfCBgY2FsbGVlcyBYYCB8IHdoYXQgWCBjYWxs"
+    "cyAoc2FtZSBlZGdlIGtpbmRzKSB8IHwKfCBgaW1wYWN0IFggLWQgTmAgfCAiYWZmZWN0cyBOIHN5"
+    "bWJvbHMiIGhlYWRsaW5lICsgcGVyLWRlcHRoIGxpc3RzICsgYnktZmlsZSBgbmFtZTpsaW5lYCBn"
+    "cm91cHMgKENvZGVHcmFwaC1zaGFwZWQpLiBEZWZhdWx0IE49MiwgY2xhbXAgMS0xMDsgc3RhcnQg"
+    "Tj0yIG9uIHdpZGUtZmFuLWluIHN5bWJvbHMgKGxvZy91dGlsIGZ1bmN0aW9ucyBleHBsb2RlKS4g"
+    "U2tpcHMgYW1iaWd1b3VzIGVkZ2VzIGJ5IGRlZmF1bHQg4oaSIGlmIGl0IHByaW50cyBhIGhpbnQg"
+    "YWJvdXQgYW1iaWd1b3VzIGVkZ2VzLCByZXJ1biB3aXRoIGAtLWFtYmlndW91c2Agb3IgeW91IFdJ"
+    "TEwgdW5kZXJlc3RpbWF0ZSB0aGUgcmFkaXVzIHwgYmVmb3JlIGEgcmVmYWN0b3IgfAp8IGBnbG9i"
+    "YWxzIFZgIHwgd3JpdGVycyB2cyByZWFkZXJzLCBzZXBhcmF0ZWQgfCAid2hvIG11dGF0ZXMgdGhp"
+    "cyBzdGF0ZSIgfAp8IGB2YXJzLW9mIEZgIHwgZ2xvYmFscyBGIHRvdWNoZXMsIGBbcmVhZHNdYC9g"
+    "W3dyaXRlc11gIHdpdGggc2l0ZXMgfCBhdWRpdCBhIGZ1bmN0aW9uJ3Mgc3RhdGUgZm9vdHByaW50"
+    "IHwKfCBgd2hvLWluY2x1ZGVzIEhgIHwgZmlsZXMgKipkaXJlY3RseSoqIGluY2x1ZGluZyBoZWFk"
+    "ZXIgSCwgYWxsIGAjaW5jbHVkZWAgc3BlbGxpbmcgdmFyaWFudHMgbWF0Y2hlZCwgYWxyZWFkeSBk"
+    "ZWR1cGVkIOKAlCBjb3VudCBsaW5lcyBkaXJlY3RseSwgbm8gcmUtdmVyaWZpY2F0aW9uIG5lZWRl"
+    "ZCAoTk9UIHRyYW5zaXRpdmUg4oCUIFNRTCB0ZW1wbGF0ZSA0IGZvciB0aGUgY2xvc3VyZSkgfCBo"
+    "ZWFkZXItZWRpdCBpbXBhY3QgfAp8IGBjby1jaGFuZ2VkIEZgIHwgZmlsZXMgaGlzdG9yaWNhbGx5"
+    "IGNoYW5naW5nIHdpdGggRiAoZ2l0KS4gKipOb3Qgc3ViamVjdCB0byBgLS1taW4tY29uZmAqKiDi"
+    "gJQgc3RhdGlzdGljYWwgbGF5ZXIgKGNvbmYgMC41MCksIGFsd2F5cyBzaG93biB3aXRoIGl0cyBj"
+    "b3VudDsgd2VpZ2ggaXQgeW91cnNlbGYgfCAid2hhdCBlbHNlIHVzdWFsbHkgbW92ZXMiIHwKfCBg"
+    "c3FsICdTRUxFQ1Qg4oCmJ2AgfCByYXcgcm93cyAoY29ubmVjdGlvbiBpcyByZWFkLW9ubHkpIHwg"
+    "YW55dGhpbmcgdGhlIHZlcmJzIGRvbid0IHNoYXBlIHwKfCBgdml6IFstLWZvcm1hdCBodG1sM2Rc"
+    "fGh0bWwyZF0gWy0tZm9jdXMgWCAtZCBOXSBbLS1mdWxsXWAgfCBzaW5nbGUgb2ZmbGluZSBpbnRl"
+    "cmFjdGl2ZSBIVE1MIOKGkiBgLmNjb2RlZ3JhcGgvZ3JhcGgtPGRpbT4uaHRtbGA7IGRlZmF1bHQg"
+    "ZW1iZWRzIHRoZSBjYWxsIGZhbWlseSwgYC0tZnVsbGAgYWxsIDgga2luZHMgfCBzaG93IGEgaHVt"
+    "YW4gdGhlIGdyYXBoIHwKfCBgc3RhdHVzYCB8IHRvb2xzK3BhdGhzIChlbnYgb3ZlcnJpZGVzIGZs"
+    "YWdnZWQpLCBza2lsbCBpbnN0YWxsLCBwcm9kdWN0cytzaXplcywgYXJ0aWZhY3QgcHJvdmVuYW5j"
+    "ZSwgaGFzaC1leGFjdCBkcmlmdCB2cyB0cmVlIHwgaGVhbHRoIGNoZWNrIC8gImlzIHRoZSBncmFw"
+    "aCBjdXJyZW50IiB8CnwgYHJlc2V0YCB8IGRlbGV0ZSBgLmNjb2RlZ3JhcGgvYCAocHJpbnRzIGVh"
+    "Y2ggcmVtb3ZhbCkgfCBzdGFydCBvdmVyIHwKfCBgc2tpbGxgIHwgcHJpbnRzIHRoaXMgZmlsZSB8"
+    "IGFpci1nYXBwZWQgaW5zdGFsbCB8CgpGbGFnczogYC0tbWluLWNvbmYgMC43YCAoZGVmYXVsdDsg"
+    "YXBwbGllcyB0byBjYWxsL3JlYWQvd3JpdGUgZmFtaWx5LCBOT1QKY28tY2hhbmdlZCksIGAtLWFt"
+    "YmlndW91c2AsIGAtLWpzb25gLCBgLS1kYiA8cGF0aD5gLgoKIyMjIE91dHB1dCBzaGFwZXMgKG9u"
+    "ZSBleGFtcGxlIGVhY2gg4oCUIGZpZWxkcyBhcmUgaWRlbnRpY2FsIGFjcm9zcyB0ZXh0L0pTT04p"
+    "CgpgYGAKJCBjY29kZWdyYXBoLnB5IGNhbGxlcnMgYXBwX2luaXQKY2FsbGVycyBvZiBhcHBfaW5p"
+    "dCDigJQgMiBkZWZpbml0aW9ucyjliIbnr4A75Y+v55SoIHFuYW1lIOeyvueiuuaMh+Wumik6CiMj"
+    "IGFsdF9pbml0LmM6OmFwcF9pbml0IOeahOWumue+qSBAIGFsdF9pbml0LmM6MQotIGRvX3N0YXJ0"
+    "ICBAIGNhbGxlci5jOjMgIFtjc2NvcGU7IGFtYmlndW91cyAyIGNhbmRpZGF0ZXM7IHNlbWFudGlj"
+    "OmNvbmZpcm1lZF0KYGBgCgpgYGBqc29uCiQgY2NvZGVncmFwaC5weSBjYWxsZXJzIGFwcF9pbml0"
+    "IC0tanNvbgp7InZlcmIiOiJjYWxsZXJzIiwic3ltYm9sIjoiYXBwX2luaXQiLCJtaW5fY29uZiI6"
+    "MC43LCJkZWZpbml0aW9ucyI6WwogIHsicW5hbWUiOiJhbHRfaW5pdC5jOjphcHBfaW5pdCIsImZp"
+    "bGUiOiJhbHRfaW5pdC5jIiwibGluZSI6MSwic2lnbmF0dXJlIjoiKHZvaWQpIiwKICAgIml0ZW1z"
+    "IjpbeyJxbmFtZSI6ImRvX3N0YXJ0Iiwic2l0ZSI6ImNhbGxlci5jOjMiLCJzaXRlcyI6MSwKICAg"
+    "ICAgICAgICAgICJvcmlnaW5zIjpbImNzY29wZSJdLCJjb25maWRlbmNlIjowLjksCiAgICAgICAg"
+    "ICAgICAidGFncyI6eyJhbWJpZ3VvdXMiOnRydWUsImNhbmRpZGF0ZXMiOjIsInNlbWFudGljIjoi"
+    "Y29uZmlybWVkIn19XX1dfQpgYGAKCmB0YWdzYCBpbiBKU09OID0gdGhlIHBhcnNlZCBgbWV0YWAg"
+    "b2YgdGhlIGVkZ2UgKHNhbWUga2V5cyk7IGluIHRleHQgdGhleSByZW5kZXIKaW5zaWRlIGBbb3Jp"
+    "Z2luczsg4oCmXWAuCgojIyDimIUgUklTSyBDSEFQVEVSIOKAlCBob3cgdG8gcmVhZCBjb25maWRl"
+    "bmNlIC8gb3JpZ2lucyAvIHRhZ3MKCkV2ZXJ5IGVkZ2UgYW5zd2VycyB0aHJlZSBxdWVzdGlvbnM6"
+    "ICoqd2hvIHNhaWQgaXQqKiAob3JpZ2luKSwgKipob3cgcmVsaWFibGUgaXMKdGhhdCBlbmdpbmUq"
+    "KiAoY29uZmlkZW5jZSksICoqd2hhdCBkbyBvdGhlciBlbmdpbmVzIHRoaW5rKiogKHRhZ3MpLiBO"
+    "b3RoaW5nCnVuY2VydGFpbiBpcyBkZWxldGVkIOKAlCBpdCBpcyBsYWJlbGxlZC4gWW91ciBqb2Ig"
+    "aXMgdG8gcmVhZCB0aGUgbGFiZWxzLgoKIyMjIENvbmZpZGVuY2U6IHdoYXQgZWFjaCBsZXZlbCBt"
+    "ZWFucyBhbmQgSE9XIElUIEZBSUxTCgp8IGNvbmYgfCBvcmlnaW4gfCBmYWlscyBieeKApiB8Cnwt"
+    "LS18LS0tfC0tLXwKfCAxLjAwIHwgYG1hbnVhbGAgfCBiZWluZyBhICoqdXNlciBhc3NlcnRpb24q"
+    "KiAoYXNzZXJ0ZWRfYnlfdXNlciksIG5vdCBhIHByb29mOyBpZiBgc2NoZW1hYCBzaG93cyBTVEFM"
+    "RSwgdGhlIHNvdXJjZSBmbnB0ci5qc29uIGNoYW5nZWQg4oCUIHJlYnVpbGQgYmVmb3JlIHRydXN0"
+    "aW5nIHwKfCAwLjk1IHwgYGNsaW5rYCArcmVhbCBjb21waWxlIERCIHwgc2VlaW5nIG9ubHkgT05F"
+    "IGJ1aWxkIGNvbmZpZzsgZWRnZXMgaW4gb3RoZXIgYCNpZmRlZmAgY29uZmlncyBhcmUgaW52aXNp"
+    "YmxlIHRvIGl0IChub3Qgd3Jvbmcg4oCUIHNjb3BlZCkgfAp8IDAuOTMgfCBgY2xpbmtgICtzeW50"
+    "aGVzaXplZCBEQiB8IHNhbWUgc2luZ2xlLWNvbmZpZyB2aWV3LCBwbHVzIGd1ZXNzZWQgYC1JYCAo"
+    "bm8gcmVhbCBgLURgKTogbW9yZSBjb2RlIGlzICJpbmFjdGl2ZSIgdG8gaXQgfAp8IDAuOTAgfCBg"
+    "Y3Njb3BlYCB8IGJlaW5nIG5hbWUta2V5ZWQgYW5kIGAjaWZkZWZgLWJsaW5kOiBzZWVzIEFMTCBi"
+    "cmFuY2hlcyAoZ3JlYXQgcmVjYWxsKSBidXQgYSBzYW1lLW5hbWVkIHN5bWJvbCBjYW4gbWlzLWJp"
+    "bmQsIGFuZCBkZWFkLWNvbmZpZyBjb2RlIGNvdW50cyB0b28gfAp8IDAuODAgfCBgZm5wdHJgIGhl"
+    "dXJpc3RpYyB8IGZpZWxkLWtleWVkIGRpc3BhdGNoIGFwcHJveGltYXRpb246IGAtPnJ1bigpYCBs"
+    "aW5rcyB0byBldmVyeSByZWdpc3RlcmVkIGBydW5gIGhhbmRsZXIgKGZhbm91dC1jYXBwZWQpIHwK"
+    "fCAwLjcwIHwgYGNhbGxiYWNrYCB8ICoqcGFzc2VzIHRoZSBkZWZhdWx0IHRocmVzaG9sZCBvbiBw"
+    "dXJwb3NlKiog4oCUIGl0IGlzIHRoZSBvbmx5IHNpZ25hbCBmb3IgcXNvcnQtY29tcGFyYXRvci9z"
+    "aWduYWwtaGFuZGxlciBxdWVzdGlvbnMuIFBocmFzZSB0aGVzZSBhcyAicG9zc2libGUgY2FsbGVy"
+    "IHZpYSBjYWxsYmFjayIgdW5sZXNzIHlvdSBoYXZlIHJlYWQgdGhlIGNpdGVkIHNpdGU7IGEgc2Ft"
+    "ZS1uYW1lZCBsb2NhbCBwYXNzZWQgYXMgYW4gYXJndW1lbnQgY2FuIGZha2Ugb25lIHwKfCAwLjUw"
+    "IHwgYGdpdGAgKGNvX2NoYW5nZXMpIHwgYmVpbmcgc3RhdGlzdGljcywgbm90IHNlbWFudGljcyB8"
+    "CgojIyMgT3JpZ2luczogYWdyZWVtZW50IGlzIGV2aWRlbmNlIOKAlCBzY29wZWQgZXZpZGVuY2UK"
+    "CmBbY3Njb3BlLCBjbGlua11gIG9uIG9uZSBwYWlyID0gaW5kZXBlbmRlbnQgdGV4dCArIHNlbWFu"
+    "dGljIGVuZ2luZXMgYWdyZWUg4oCUCnN0cm9uZyAqKndpdGhpbiB0aGUgYWN0aXZlIGJ1aWxkIGNv"
+    "bmZpZyoqIChpdCBzYXlzIG5vdGhpbmcgYWJvdXQgb3RoZXIKY29uZmlncykuIEEgc2luZ2xlIGBb"
+    "Y2FsbGJhY2tdYCA9IGhldXJpc3RpYyBvbmx5LiBVbmlvbiBwaGlsb3NvcGh5OiBtaXNzaW5nCmVk"
+    "Z2VzIGFyZSBmb3VnaHQgd2l0aCBtdWx0aXBsZSBlbmdpbmVzLCBmYWxzZSBlZGdlcyB3aXRoIGxh"
+    "YmVsczsgZmlsdGVyaW5nIGlzCllPVVIgY2FsbCAoYC0tbWluLWNvbmZgKSwgbmV2ZXIgc2lsZW50"
+    "IGRlbGV0aW9uLgoKIyMjIGBzZW1hbnRpYzogY29uZmlybWVkIHwgYWJzZW50YCDigJQgYSBwYXJz"
+    "ZS1jb3ZlcmFnZSBzaWduYWwgKE5PVCBhbiAjaWZkZWYgc2lnbmFsKQoKLSBgY29uZmlybWVkYCDi"
+    "gJQgY2xpbmsgKGxpYmNsYW5nIHRva2VuaXphdGlvbikgYWxzbyBzYXcgdGhpcyBlZGdlLiBOb3Rl"
+    "OgogIGNsaW5rJ3MgY2FsbCBleHRyYWN0aW9uIGlzIFRPS0VOLWxldmVsIGFuZCAqKmluY2x1ZGVz"
+    "IGluYWN0aXZlIGAjaWZkZWZgCiAgcmVnaW9ucyBieSBkZXNpZ24qKiAoaXQgaXMgYSBjc2NvcGUg"
+    "c3VjY2Vzc29yKSDigJQgc28gY29uZmlybWVkIGRvZXMgTk9UCiAgbWVhbiAiYWN0aXZlIGluIHRo"
+    "aXMgYnVpbGQgY29uZmlnIi4KLSBgYWJzZW50YCDigJQgdGhlIGVkZ2Ugc2l0cyAqKm91dHNpZGUg"
+    "Y2xpbmsncyBzdWNjZXNzZnVsIHBhcnNlIGNvdmVyYWdlKiouCiAgTWVhc3VyZWQgY2F1c2VzIG9u"
+    "IHdwYSAoMTMsODk1IGFic2VudCk6IHdob2xlIGZpbGVzIGNsaW5rIGNvdWxkIG5vdCBwYXJzZQog"
+    "IChRdCBDKysgLmNwcCksIGZpbGVzIHdob3NlIGNsYW5nIHBhcnNlIGFib3J0ZWQgbWlkLXdheSAo"
+    "bWlzc2luZyBpbmNsdWRlcyksCiAgQysrIHdlYWsgYXJlYXMuIEl0IGlzIGEgInNlY29uZCBlbmdp"
+    "bmUgbmV2ZXIgbG9va2VkIGhlcmUiIGZsYWcsIG5vdCBhCiAgZmFsc2l0eSBzaWduYWwuIENvbmZp"
+    "ZGVuY2UgaXMgZGVsaWJlcmF0ZWx5IE5PVCBsb3dlcmVkLgotIFdhbnRpbmcgdHJ1ZSBhY3RpdmUt"
+    "Y29uZmlnIHByZWNpc2lvbiAoc3RhdGVtZW50LWxldmVsIGAjaWZkZWZgKSByZXF1aXJlcyBhCiAg"
+    "cmVhbCBjbGFuZ2QvY2xhbmctQVNUIHBhc3Mgd2l0aCB0aGUgYWN0dWFsIGAtRGAgc2V0IOKAlCBu"
+    "b3QgcHJvdmlkZWQgdG9kYXk7CiAgc2VlIGJsaW5kLXNwb3QgdGFibGUuCgojIyMgYGFtYmlndW91"
+    "cyBOIGNhbmRpZGF0ZXNgIOKAlCBzYW1lLW5hbWUgbXVsdGlwbGUgZGVmaW5pdGlvbnMKClRoZSBn"
+    "cmFwaCBhdHRhY2hlcyBzdWNoIGVkZ2VzIHRvIGV2ZXJ5IHZpYWJsZSBjYW5kaWRhdGUgYW5kIGxh"
+    "YmVscyB0aGVtCihzdGF0aWMgZnVuY3Rpb25zIGFscmVhZHkgYm91bmQgc2FtZS1maWxlIC8gaGVh"
+    "ZGVyLXN0YXRpYyB0byBpbmNsdWRlcnM7IHdoYXQKcmVtYWlucyBpcyBnZW51aW5lbHkgdW5kZWNp"
+    "ZGFibGUgYXQgdGV4dCBsZXZlbCkuCi0gYGNhbGxlcnNgL2BleHBsb3JlYCBTSE9XIHRoZW0gKGxh"
+    "YmVsbGVkKS4KLSBgaW1wYWN0YCBTS0lQUyB0aGVtIGJ5IGRlZmF1bHQ7IG9uIHRoZSBlbXB0eS1y"
+    "ZXN1bHQgaGludCwgcmVydW4KICBgLS1hbWJpZ3VvdXNgIGFuZCBqdWRnZSBjYW5kaWRhdGVzIHlv"
+    "dXJzZWxmLgotIFBpbiBvbmUgZGVmaW5pdGlvbiBieSBxbmFtZTogYGNhbGxlcnMgJ2Vsb29wLmM6"
+    "OmVsb29wX2luaXQnYC4KCiMjIEVycm9ycyAmIHdoYXQgdG8gZG8gbmV4dAoKfCBNZXNzYWdlIHwg"
+    "TmV4dCBzdGVwIHwKfC0tLXwtLS18CnwgYEVSUk9SOiBubyBncmFwaCBhdCDigKZgIHwgYGJ1aWxk"
+    "IC1wIDxyb290PmAgZmlyc3QgfAp8IGBzeW1ib2wgIlgiIG5vdCBmb3VuZGAgfCBuYW1lIGlzIGV4"
+    "YWN0LW1hdGNoOiBodW50IHdpdGggYHNxbCAiU0VMRUNUIHFuYW1lLGtpbmQgRlJPTSBub2RlcyBX"
+    "SEVSRSBuYW1lIExJS0UgJyVYJSciYCB8CnwgYChubyB1bmFtYmlndW91cyBpbXBhY3Q7IE4gYW1i"
+    "aWd1b3VzIGVkZ2Vz4oCmKWAgfCByZXJ1biB3aXRoIGAtLWFtYmlndW91c2AgfAp8IGBXQVJOSU5H"
+    "OiBmbnB0ci5qc29uIGNoYW5nZWQg4oCmIFNUQUxFYCB8IGBidWlsZGAgKGZ1bGwgb3IgYC0taW5j"
+    "cmVtZW50YWxgKSB0byByZS1pbmdlc3QgbWFudWFsIGVkZ2VzIHwKfCBgRVJST1I6IGNsaW5rIG5v"
+    "dCBmb3VuZGAgfCBzZW1hbnRpYyBsYXllciBpcyBvcHRpb25hbCDigJQgc2tpcCBpdCwgb3IgaW5z"
+    "dGFsbCBjbGluayAvIHNldCBgQ0NPREVHUkFQSF9DTElOS2AgfAp8IGBFUlJPUjogY2xpbmsgZGIg"
+    "c2NoZW1hIHVzZXJfdmVyc2lvbj3igKZgIHwgY2xpbmsgdXBncmFkZWQgaXRzIHNjaGVtYTsgdXBk"
+    "YXRlIHRoZSBpbXBvcnRlciAoZG8gbm90IGlnbm9yZSkgfAp8IGBFUlJPUjog4oCmIFVuaXZlcnNh"
+    "bCBDdGFnc2AgfCBpbnN0YWxsIHVuaXZlcnNhbC1jdGFncyAobWVzc2FnZSBpbmNsdWRlcyBwZXIt"
+    "T1MgY29tbWFuZHMpIHwKCiMjIEJsaW5kIHNwb3RzIChtZWFzdXJlZCwgbm90IGd1ZXNzZWQpCgp8"
+    "IEJsaW5kIHNwb3QgfCBSZWFsaXR5IHwgRmFsbGJhY2sgfAp8LS0tfC0tLXwtLS18CnwgbWFjcm8t"
+    "R0VORVJBVEVEIGRlZmluaXRpb25zIChgREVGSU5FX0hBTkRMRVIoZm9vKWAg4oaSIGBmb29faGFu"
+    "ZGxlcmApIHwgaW52aXNpYmxlIHRvIGV2ZXJ5IHRleHQgbGF5ZXI7IGNsaW5rK3JlYWwtREIgbWF5"
+    "IHNlZSBpdCB8IGBzcWxgIExJS0Utc2VhcmNoIHRoZSBnZW5lcmF0b3IsIHJlYWQgdGhlIG1hY3Jv"
+    "IHwKfCBvYmplY3QtbGlrZSBtYWNybyB1c2FnZSAoYCNkZWZpbmUgTiA1YCDigKYgYHggPSBOO2Ap"
+    "IHwgYGV4cGFuZHNgIGVkZ2VzIGFyZSB2ZXJpZmllZCBmb3IgZnVuY3Rpb24tbGlrZSBtYWNyb3M7"
+    "IG9iamVjdC1saWtlIHVzYWdlIG1heSBub3QgYXBwZWFyIHwgYHNxbGA6IHNlYXJjaCBub2RlcyBr"
+    "aW5kPSdtYWNybycsIHRoZW4gZ3JlcCB0aGUgbmFtZSB8CnwgQysrIHRlbXBsYXRlcy9vdmVybG9h"
+    "ZHMgfCBiZXN0LWVmZm9ydCBzeW1ib2xzIG9ubHkgKFczKSB8IGNsYW5nZC1iYXNlZCB0b29saW5n"
+    "IGZvciBDKystaGVhdnkgd29yayB8CnwgbmFtZS1rZXllZCBzaGFkb3dpbmcgfCBhIGxvY2FsIG5h"
+    "bWVkIGxpa2UgYSBnbG9iYWwvZnVuY3Rpb24gY2FuIG1pc2NvdW50IHwgY2hlY2sgdGhlIGNpdGVk"
+    "IGBmaWxlOmxpbmVgIHwKfCBjb21wdXRlZC9ub24tbGl0ZXJhbCBgI2luY2x1ZGVgIHwgbm90IG1v"
+    "ZGVsbGVkIHwgZ3JlcCB8CgojIyBTUUwgZXNjYXBlIGhhdGNoIChyZWFkLW9ubHk7IHNjaGVtYSBj"
+    "b250cmFjdCB2MSkKCmBgYHNxbAotLSBub2RlcyhpZCBJTlRFR0VSIFBLLCBuYW1lLCBxbmFtZSwg"
+    "a2luZDogZnVuY3Rpb258Z2xvYmFsfG1hY3JvfGZpbGUsIGZpbGUsCi0tICAgICAgIGxpbmVfc3Rh"
+    "cnQsIGxpbmVfZW5kLCBzaWduYXR1cmUsIGlzX3N0YXRpYywgb3JpZ2luLCBjb25maWRlbmNlKQot"
+    "LSBlZGdlcyhzcmPihpJub2Rlcy5pZCwgZHN04oaSbm9kZXMuaWQsCi0tICAgICAgIGtpbmQ6IGNh"
+    "bGxzfGNhbGxiYWNrfGZucHRyfHJlYWRzfHdyaXRlc3xpbmNsdWRlc3xleHBhbmRzfGNvX2NoYW5n"
+    "ZXMsCi0tICAgICAgIGZpbGUsIGxpbmUsIG9yaWdpbiwgY29uZmlkZW5jZSwgbWV0YSBKU09OKSAg"
+    "IC0tIG1ldGEgPSB0aGUgInRhZ3MiCi0tIOS4gOWIl+S4gOermem7njtwYWlyIOe0mueUqCBlZGdl"
+    "X3BhaXJzIOimluWclihzcmMsZHN0LGtpbmQsY29uZmlkZW5jZSxmaXJzdF9zaXRlLAotLSAgICAg"
+    "ICBzaXRlX2NvdW50LG9yaWdpbnMpCgotLSAxLiBkZWFkLWlzaCBmdW5jdGlvbnM6IGRlZmluZWQs"
+    "IG5ldmVyIGNhbGxlZC9kaXNwYXRjaGVkClNFTEVDVCBuLnFuYW1lIEZST00gbm9kZXMgbiBXSEVS"
+    "RSBuLmtpbmQ9J2Z1bmN0aW9uJyBBTkQgTk9UIEVYSVNUUwogIChTRUxFQ1QgMSBGUk9NIGVkZ2Vz"
+    "IGUgV0hFUkUgZS5kc3Q9bi5pZCBBTkQgZS5raW5kIElOICgnY2FsbHMnLCdjYWxsYmFjaycsJ2Zu"
+    "cHRyJykpOwoKLS0gMi4gZXZlcnkgY2FsbCBzaXRlIG9mIFkgaW5zaWRlIG9uZSBjYWxsZXIgWCAo"
+    "YWxsIHNpdGVzLCBub3QganVzdCB0aGUgZmlyc3QpClNFTEVDVCBlLmZpbGUsIGUubGluZSBGUk9N"
+    "IGVkZ2VzIGUgSk9JTiBub2RlcyBzIE9OIHMuaWQ9ZS5zcmMKICBKT0lOIG5vZGVzIGQgT04gZC5p"
+    "ZD1lLmRzdCBXSEVSRSBzLm5hbWU9J1gnIEFORCBkLm5hbWU9J1knCiAgQU5EIGUua2luZD0nY2Fs"
+    "bHMnIE9SREVSIEJZIGUuZmlsZSwgZS5saW5lOwoKLS0gMy4gaG90dGVzdCBnbG9iYWxzIGJ5IHdy"
+    "aXRlciBjb3VudApTRUxFQ1QgZC5xbmFtZSwgQ09VTlQoRElTVElOQ1QgZS5zcmMpIHcgRlJPTSBl"
+    "ZGdlcyBlIEpPSU4gbm9kZXMgZCBPTiBkLmlkPWUuZHN0CiAgV0hFUkUgZS5raW5kPSd3cml0ZXMn"
+    "IEdST1VQIEJZIGQucW5hbWUgT1JERVIgQlkgdyBERVNDIExJTUlUIDEwOwoKLS0gNC4gVFJBTlNJ"
+    "VElWRSBpbmNsdWRlIGNsb3N1cmUgb2YgaGVhZGVyIEggKHdobyByZWJ1aWxkcyBpZiBIIGNoYW5n"
+    "ZXMpCldJVEggUkVDVVJTSVZFIGluYyhpZCkgQVMgKAogIFNFTEVDVCBpZCBGUk9NIG5vZGVzIFdI"
+    "RVJFIGtpbmQ9J2ZpbGUnIEFORCBxbmFtZT0nSCcKICBVTklPTgogIFNFTEVDVCBlLnNyYyBGUk9N"
+    "IGVkZ2VzIGUgSk9JTiBpbmMgT04gZS5kc3Q9aW5jLmlkIFdIRVJFIGUua2luZD0naW5jbHVkZXMn"
+    "KQpTRUxFQ1QgRElTVElOQ1Qgbi5xbmFtZSBGUk9NIGluYyBKT0lOIG5vZGVzIG4gT04gbi5pZD1p"
+    "bmMuaWQ7CmBgYAoKIyMgQWdlbnQgZ3VpZGFuY2UKCi0gKipHcmFwaCBmaXJzdCwgZ3JlcCBsYXN0"
+    "LioqIEFzayB0aGUgZ3JhcGgsIHRoZW4gUmVhZCB0aGUgZXhhY3QgYGZpbGU6bGluZWAgaXQKICBj"
+    "aXRlcy4gUmV2ZXJzaW5nIHRoZSBvcmRlciBpcyB3aGF0IGJ1cm5zIHRva2VucyAobWVhc3VyZWQg"
+    "MTPigJM5MMOXKS4KLSAqKlRoaXMgZmlsZSBpcyB0aGUgY29tcGxldGUgcmVmZXJlbmNlKiog4oCU"
+    "IG5vIG5lZWQgdG8gcnVuIGAtLWhlbHBgIG9yIHJlYWQgdGhlCiAgdG9vbCdzIHNvdXJjZSBjb2Rl"
+    "IChtZWFzdXJlZCBBL0I6IHRoYXQgc2VsZi12ZXJpZmljYXRpb24gd2FzIHRoZSBtYWluIHRva2Vu"
+    "CiAgb3ZlcmhlYWQpLiBWZXJiIG91dHB1dCBpcyBhbHJlYWR5IGRlZHVwbGljYXRlZCBhbmQgbGFi"
+    "ZWxsZWQ6IGZvciByb3V0aW5lCiAgcXVlc3Rpb25zIHVzZSBpdCBkaXJlY3RseTsgcmVzZXJ2ZSBT"
+    "UUwgLyBgZmlsZTpsaW5lYCByZS12ZXJpZmljYXRpb24gZm9yCiAgYW5zd2VyLWNyaXRpY2FsIGNh"
+    "c2VzIOKAlCB3aGVuIHlvdSBhcmUgYWJvdXQgdG8gY2hhbmdlIGNvZGUgb3IgbWFrZSBhIGRlY2lz"
+    "aW9uCiAgYmFzZWQgb24gdGhlIGFuc3dlci4KLSBFbXB0eSByZXN1bHQg4omgIG5vdGhpbmcgZXhp"
+    "c3RzOiBjaGVjayBgc2NoZW1hYCAobGF5ZXIgcGVuZGluZz8gU1RBTEU/KSwgdGhlCiAgYmxpbmQt"
+    "c3BvdCB0YWJsZSwgdGhlbiBgLS1hbWJpZ3VvdXNgIC8gYC0tbWluLWNvbmYgMC41YC4KLSBBZnRl"
+    "ciBlZGl0aW5nIGNvZGU6IGBidWlsZCAtLWluY3JlbWVudGFsYCDigJQgdGhlIGdyYXBoIGlzIG9u"
+    "bHkgdHJ1c3R3b3J0aHkKICB3aGVuIGFsaWduZWQgd2l0aCB0aGUgdHJlZS4KLSBQcmVmZXIgYC0t"
+    "anNvbmAgd2hlbiB5b3Ugd2lsbCBjaGFpbiB0aGUgZGF0YTsgdGV4dCB3aGVuIGEgaHVtYW4gcmVh"
+    "ZHMgaXQuCg=="
+)
+SKILL_MD = base64.b64decode(_SKILL_B64).decode()
+# --- EMBEDDED_SKILL_END ---
 CSCOPE_DB = os.path.join(PRODUCTS_DIR, "cscope.out")   # 專用索引,集中產物目錄(FR6)
 HEADER_EXTS = (".h", ".hpp", ".hh")
 FANOUT_CAP = 16                          # fnptr field 註冊數上限(超過視為雜訊)
@@ -1475,9 +1713,21 @@ SKILL_INSTALL_DIRS = [
 ]
 
 
-def q_status(root: str, db: str) -> dict[str, Any]:
-    """#4 維護動詞(ccq status 血統):環境/skill/產物/出處/新鮮度,路徑全印。"""
-    res: dict[str, Any] = {"verb": "status", "root": root}
+KNOWN_ENV = ["CCODEGRAPH_CTAGS_PATH", "CCODEGRAPH_CSCOPE_PATH",
+             "CCODEGRAPH_CLINK_PATH", "CCODEGRAPH_CLINK",
+             "CCODEGRAPH_GIT_PATH"]
+
+
+def q_status(root: str, db: str, full: bool = False) -> dict[str, Any]:
+    """維護動詞(ccq status 血統):偵錯分診的第一手資料——環境/工具版本/
+    env vars/skill/產物/出處/新鮮度,路徑全印。--full 給支援工程師看的完整版。"""
+    import platform as _platform
+    res: dict[str, Any] = {"verb": "status", "root": root,
+                           "ccodegraph": VERSION,
+                           "python": sys.version.split()[0],
+                           "platform": _platform.platform()}
+    res["env"] = {k: os.environ.get(k) for k in KNOWN_ENV
+                  if full or k in os.environ}
     tools = {}
     for t in ("ctags", "cscope", "clink", "git"):
         p = tool_path(t) if t != "clink" else CLINK_BIN
@@ -1516,9 +1766,12 @@ def q_status(root: str, db: str) -> dict[str, Any]:
         return res
     con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
     meta = dict(con.execute("SELECT key, value FROM meta"))
+    hist = json.loads(meta.get("history", "[]"))
     art: dict[str, Any] = {
+        "db_label": meta.get("db_label"),
         "schema_version": meta.get("schema_version"),
         "engines_run": json.loads(meta.get("engines_run", "[]")),
+        "history_tail": hist[-5:] if full else hist[-1:],
         "nodes": con.execute("SELECT COUNT(*) FROM nodes").fetchone()[0],
         "edges": con.execute("SELECT COUNT(*) FROM edges").fetchone()[0],
     }
@@ -1544,8 +1797,12 @@ def q_status(root: str, db: str) -> dict[str, Any]:
     return res
 
 
-def render_status(res: dict[str, Any]) -> None:
-    print(f"ccodegraph status — {res['root']}")
+def render_status(res: dict[str, Any], full: bool = False) -> None:
+    print(f"ccodegraph {res['ccodegraph']} status — {res['root']}")
+    print(f"env    : python {res['python']} · {res['platform']}")
+    if res["env"]:
+        for k, v in res["env"].items():
+            print(f"  {k} = {v if v is not None else '(unset)'}")
     print("tools:")
     for t, info in res["tools"].items():
         ov = "  (env override)" if info["env_override"] else ""
@@ -1559,17 +1816,26 @@ def render_status(res: dict[str, Any]) -> None:
         print("databases: " + "; ".join(res["databases"])
               + "   (dumpdb --db <f> 看各自 metadata;自訂路徑外的 DB "
                 "status/reset 管不到)")
-    print("products:")
-    for p in res["products"]:
-        print(f"  {p['path']}  {p['size']:,} B  {p['mtime']}")
-    if not res["products"]:
-        print("  (none)")
+    if full:
+        print("products:")
+        for p in res["products"]:
+            print(f"  {p['path']}  {p['size']:,} B  {p['mtime']}")
+        if not res["products"]:
+            print("  (none)")
+    else:
+        tot = sum(p["size"] for p in res["products"])
+        print(f"products: {len(res['products'])} files, {tot:,} B "
+              f"(--full 逐項列出)")
     art = res.get("artifact")
     if art:
-        print(f"artifact: schema v{art['schema_version']}, "
+        print(f"artifact: {art.get('db_label') or 'graph.db'} schema "
+              f"v{art['schema_version']}, "
               f"{art['nodes']} nodes, {art['edges']} edges")
         for e in art["engines_run"]:
             print(f"  engine: {e}")
+        for h in art.get("history_tail", []):
+            print(f"  history: {h.get('ts')} {h.get('action')}"
+                  + (f" mode={h['mode']}" if h.get('mode') else ""))
         if art.get("built_at_git"):
             print(f"  built at git {art['built_at_git']}"
                   + (f"; now {res['git_now']}" if res.get("git_now") else ""))
@@ -1664,7 +1930,8 @@ def main() -> None:
                     help="R8:module_mapping.csv(regex,module;英文不分大小寫)"
                          "— build 時填 nodes.module,viz 依 module 分群")
     ap.add_argument("--full", action="store_true",
-                    help="viz:嵌入全部 8 種邊(預設只嵌呼叫家族)")
+                    help="viz:嵌入全部 8 種邊;status:完整偵錯版"
+                         "(全部 env vars/逐項產物/history 5 筆)")
     ap.add_argument("--json", action="store_true",
                     help="FR9:輸出 JSON(與文字欄位一一對應),LLM 自選格式")
     a = ap.parse_args()
@@ -1672,24 +1939,18 @@ def main() -> None:
     db = a.db or os.path.join(root, DB_NAME)
 
     if a.verb == "skill":
-        p = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                         "skills", "ccodegraph", "SKILL.md")
-        try:
-            with open(p) as fh:
-                print(fh.read(), end="")
-        except OSError:
-            sys.exit(f"ERROR: SKILL.md not found at {p}")
+        print(SKILL_MD, end="")   # 內嵌版:單檔 ccodegraph.py 即可輸出 skill
         return None
     if a.verb == "build":
         return build(root, db, a.jobs, a.incremental, a.module_map)
     if a.verb == "clink-import":
         return clink_import(root, db, a.compdb)
     if a.verb == "status":
-        res_s = q_status(root, db)
+        res_s = q_status(root, db, a.full)
         if a.json:
             print(json.dumps(res_s, ensure_ascii=False))
         else:
-            render_status(res_s)
+            render_status(res_s, a.full)
         return None
     if a.verb == "reset":
         return reset_cmd(root)
