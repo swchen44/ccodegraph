@@ -137,6 +137,7 @@ line_start,line_end,is_static)與 edges(src_qname,dst_qname,kind,file,line,origi
 | tree-sitter | L2 跳過 | 明講跳過;schema 動詞列 pending |
 | clangd / compile DB | L4 跳過 | 同上;confidence 天花板停在 0.90 |
 | git repo 不存在 | L5 跳過 | 增量退化為全量;明講 |
+| cscope 對某符號回報內部錯誤(D15,如 vendored 巨集被密集使用) | 該符號的邊漏收 | warn + 跳過,build 繼續;彙總印出 + 計入 `history.cscope_skipped` |
 
 ## 2. 邊分類學(每一種都標「誰能填、C 上的實測期望」)
 
@@ -351,6 +352,29 @@ C++ 弱區——**absent = 解析覆蓋洞,不是 config-gated 訊號**。早前
 「absent = config-gated」詮釋據此修正(SKILL/README 同步)。語句級 `#ifdef`
 精度需要真 clangd/clang-AST + 真實 -D——保留給 L4 備用路線的重啟條件。
 
+## 8.5.4 D15:cscope 單一符號內部錯誤不得使整個 build 中止(2026-07-06,難題 benchmark 硬體時發現)
+
+**發現經過**:為真跑 benchmark v2 準備 Arm B(ccodegraph)環境時,對 redis(含 `deps/`
+vendored 第三方碼)完整 `build` 100% 重現失敗:`cscope -d -f … -L3 CTL` 回報
+`Internal error: cannot get source line from database`,rc=1。單執行緒(`-j 1`)
+重跑同樣失敗,證實**不是 ThreadPoolExecutor 併發競態,是 cscope 自身對單一符號的
+限制**——根因是 `deps/jemalloc/src/ctl.c` 內巨集 `CTL(c)` 被同檔呼叫數百次
+(`{NAME(...), CTL(opt_hpa_hugify_delay_ms)}` 這類巨大靜態表),cscope 查詢該符號的
+呼叫者時內部出錯。舊實作 `cscope_lines()` 透過 `run_checked()` 對任何非零 rc 直接
+`sys.exit()`——**一個壞符號讓上萬次查詢的整個 build 陣亡**,違反 P7「寧可漏報絕不
+誤報」的精神(這裡連漏報的機會都沒給,直接整張圖沒了)。
+
+**修法**:`cscope_lines()` 不再借道 `run_checked`,改直接呼叫 `subprocess.run` 並在
+非零 rc 時記錄到模組級 `CSCOPE_SKIPPED`(該符號、精簡 stderr)、回傳空結果,讓
+build 繼續跑完其餘符號。`build()` 結尾彙整警告(筆數 + 前 5 個範例)並寫入
+`meta.history` 的 `cscope_skipped` 欄位(供 `status`/`dumpdb` 追溯)。`run_checked`
+本身不動——初始 `cscope -bkR`、ctags、git 呼叫仍是系統性失敗就該硬死,只有「單一符號
+查詢」這個高頻小顆粒操作改成優雅降級。
+
+**驗證**:redis 完整 build 通過(127s,46,346 calls 邊,`CTL` 為唯一跳過符號並印出
+警告);wpa 重跑邊數與 fix 前一致(無回歸);138 tests(新增 2 個:模擬非零 rc 應
+回空+記錄、成功案例不受影響)。
+
 ## 8.6 第二輪紅隊(文件盲區)處置(2026-07-05)
 
 報告:[reviews/2026-07-05-codex-docs-round2.md](reviews/2026-07-05-codex-docs-round2.md)。
@@ -374,6 +398,8 @@ vs 使用者原話「查詢層等 DB 完整後」)。測試缺口 T1-T8 入 road
 | D8 | Schema 是合約,引擎可換(→R6 Rust) | ✅ | — |
 | D9 | 產物集中 .ccodegraph/;路徑不隱藏 | ✅ | — |
 | D10 | 分工:機械工作給程式,LLM 做高階判斷 | ✅ | R4 查詢層設計 |
+| D14 | semantic:absent = 解析覆蓋洞,不是 config-gated 訊號 | ✅ 修正 D3 詮釋 | — |
+| D15 | cscope 單一符號內部錯誤 → warn+跳過,不中止整個 build | ✅ | — |
 
 ## 9. Roadmap(進度總覽;完成的打勾,順序即計畫。R=roadmap 項,R3=保留號未指派;T=測試缺口)
 

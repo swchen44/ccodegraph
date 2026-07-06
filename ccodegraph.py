@@ -593,11 +593,27 @@ def run_checked(cmd: list[str], cwd: str) -> str:
     return r.stdout
 
 
+CSCOPE_SKIPPED: list[tuple[str, str]] = []  # (symbol, stderr) — build() 結尾彙整警告
+
+
 def cscope_lines(root: str, qflag: str, sym: str) -> list[CscopeRow]:
-    """cscope -d -f <專用索引> -L<q> sym → [(field2, file, line, text)]。"""
+    """cscope -d -f <專用索引> -L<q> sym → [(field2, file, line, text)]。
+
+    D15(2026-07-06,真實 redis 建圖時發現):cscope 對單一符號在同檔被
+    極端密集使用時(實測:jemalloc `deps/` 內巨集 CTL 被呼叫數百次)會回報
+    "Internal error: cannot get source line from database"(rc!=0)——單執行緒
+    重跑也 100% 重現,不是併發競態。這是 cscope 自身的已知限制,不是我們的
+    查詢語法錯誤。單一符號失敗不該讓上萬次查詢的整個 build 陣亡(P7 精神:
+    寧可漏這一條邊,不要整張圖都沒了)——warn + 跳過該符號,計入
+    CSCOPE_SKIPPED,build() 結尾印出彙總筆數與清單。"""
     out: list[CscopeRow] = []
-    raw_out = run_checked(
-        [tool_path("cscope"), "-d", "-f", CSCOPE_DB, "-L" + qflag, sym], root)
+    r = subprocess.run(
+        [tool_path("cscope"), "-d", "-f", CSCOPE_DB, "-L" + qflag, sym],
+        cwd=root, capture_output=True, text=True)
+    if r.returncode != 0:
+        CSCOPE_SKIPPED.append((sym, r.stderr.strip()[:200]))
+        return out
+    raw_out = r.stdout
     for raw in raw_out.splitlines():
         p = raw.split(None, 3)
         if len(p) >= 3 and p[2].isdigit():
@@ -825,6 +841,7 @@ def build(root: str, db_path: str, jobs: int,
                  "macOS: brew install cscope / Linux: apt install cscope;"
                  "或設 CCODEGRAPH_CSCOPE_PATH=/path/to/cscope")
     t0 = time.time()
+    CSCOPE_SKIPPED.clear()   # D15:每次 build() 重新計數,不跨呼叫累積
     pdir = os.path.join(root, PRODUCTS_DIR)
     os.makedirs(pdir, exist_ok=True)
     legacy = os.path.join(root, ".ideal-graph.cscope.out")
@@ -1129,6 +1146,7 @@ def build(root: str, db_path: str, jobs: int,
         "action": "build-incremental" if incremental else "build-full",
         "files": len(srcs), "git": (head[:12] if head else None),
         "module_map": os.path.basename(module_map) if module_map else None,
+        "cscope_skipped": len(CSCOPE_SKIPPED),
         "seconds": round(time.time() - t0, 1)})
     con.execute("INSERT INTO meta VALUES ('history',?)",
                 (json.dumps(old_history, ensure_ascii=False),))
@@ -1147,6 +1165,12 @@ def build(root: str, db_path: str, jobs: int,
     print(f"done: {db_path}  ({len(defs) + len(srcs)} nodes; edges: "
           + ", ".join(f"{k}={v}" for k, v in sorted(counts.items()))
           + f"; {time.time() - t0:.0f}s)")
+    if CSCOPE_SKIPPED:
+        print(f"WARNING: cscope 對 {len(CSCOPE_SKIPPED)} 個符號回報內部錯誤"
+              f"(通常是同檔內被極端密集使用的巨集/符號,如 vendored 第三方碼)"
+              f"——這些符號的邊已跳過,其餘正常。範例:"
+              + ", ".join(s for s, _ in CSCOPE_SKIPPED[:5])
+              + (" …" if len(CSCOPE_SKIPPED) > 5 else ""))
     print("note: 語意層跑 `clink-import`(選配)可疊加 semantic 註記。")
 
 

@@ -374,6 +374,39 @@ class TestToolPath(unittest.TestCase):
         self.assertEqual(ig.tool_path("ctags"), "ctags")
 
 
+class TestCscopeLinesLenient(unittest.TestCase):
+    """D15:cscope 對單一符號的內部錯誤(實測:redis vendored jemalloc 的巨集
+    CTL 被密集使用時觸發 'Internal error: cannot get source line from
+    database',單執行緒 100% 重現,非併發競態)不得讓整個 build 中止——
+    跳過該符號、計入 CSCOPE_SKIPPED,其餘符號正常處理。"""
+
+    def setUp(self):
+        ig.CSCOPE_SKIPPED.clear()
+
+    def test_nonzero_rc_returns_empty_and_records_skip(self):
+        import subprocess as sp
+        import unittest.mock as mock
+        fake = sp.CompletedProcess(
+            args=[], returncode=1, stdout="",
+            stderr="Internal error: cannot get source line from database")
+        with mock.patch("subprocess.run", return_value=fake):
+            rows = ig.cscope_lines("/tmp", "3", "CTL")
+        self.assertEqual(rows, [])
+        self.assertEqual(len(ig.CSCOPE_SKIPPED), 1)
+        self.assertEqual(ig.CSCOPE_SKIPPED[0][0], "CTL")
+
+    def test_success_case_unaffected(self):
+        import subprocess as sp
+        import unittest.mock as mock
+        fake = sp.CompletedProcess(
+            args=[], returncode=0,
+            stdout="a.c foo 10 foo();\n", stderr="")
+        with mock.patch("subprocess.run", return_value=fake):
+            rows = ig.cscope_lines("/tmp", "3", "foo")
+        self.assertEqual(rows, [("foo", "a.c", 10, "foo();")])
+        self.assertEqual(ig.CSCOPE_SKIPPED, [])
+
+
 class TestModuleMap(unittest.TestCase):
     def _map(self, content):
         import tempfile
