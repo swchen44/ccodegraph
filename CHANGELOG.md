@@ -9,6 +9,8 @@ Pre-1.0 caveat (SemVer §4): anything MAY change at any time; the public API
 
 ## [Unreleased]
 
+## [0.0.4] - 2026-07-07
+
 ### Added
 
 - `status` v3 as a support-triage tool (codex round-4 review adopted):
@@ -20,6 +22,26 @@ Pre-1.0 caveat (SemVer §4): anything MAY change at any time; the public API
   `--full` (all env vars, per-file products, full drift list, history×5).
 - SKILL.md embedded in ccodegraph.py (base64 block via `tools/embed_skill.py`)
   so a standalone file can emit it; unit test enforces embedded == file.
+- Hard-case benchmark v2 (`docs/research/llm-ab-v2-hard-cases.md`): a
+  22-question harder test bank (`docs/research/hard-benchmark/`, adapted
+  from a 12-category/L1–L4 Linux-kernel navigation taxonomy) for
+  wpa_supplicant/redis; 4 of the hardest questions run for real via
+  Claude Code headless mode (Arm A: grep-only vs Arm B: ccodegraph),
+  plus an Arm C 3-way comparison using a real `bear`-generated
+  `compile_commands.json` for 2 redis cases. Honest result: on these
+  harder questions the two arms land near-parity on correctness; the
+  real differentiators are precision on summary arithmetic, proactive
+  risk-flagging of fn-pointer dispatch, and fewer tool calls per answer
+  — not "can answer at all vs can't."
+
+### Fixed
+
+- **D15**: cscope reporting an internal error for a single symbol that is
+  referenced extremely densely within one file (e.g. vendored macros like
+  jemalloc's `CTL`) no longer aborts the whole `build` — that symbol's
+  query is skipped with a warning (recorded in `history.cscope_skipped`),
+  and the rest of the graph still builds. Found while building a real
+  benchmark graph on redis; verified no edge-count regression on wpa.
 
 ## [0.0.3] - 2026-07-06
 
