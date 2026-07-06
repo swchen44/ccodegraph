@@ -9,6 +9,18 @@ Pre-1.0 caveat (SemVer §4): anything MAY change at any time; the public API
 
 ## [Unreleased]
 
+### Added
+
+- `status` v3 as a support-triage tool (codex round-4 review adopted):
+  `health: OK|WARN|ERROR` headline + stable `issues[]` codes with actions
+  (ENV_UNKNOWN_VARS typo detection, STALE_GRAPH, ROOT_MISMATCH, SKILL_STALE,
+  CLINK_SYNTHESIZED, TOOL_MISSING…), `status_schema_version` for automation,
+  tool ✓/✗ + ctags flavor, DB identity checks (recorded root / git),
+  clink last-import stats, compile-DB entry count; noisy details moved to
+  `--full` (all env vars, per-file products, full drift list, history×5).
+- SKILL.md embedded in ccodegraph.py (base64 block via `tools/embed_skill.py`)
+  so a standalone file can emit it; unit test enforces embedded == file.
+
 ## [0.0.3] - 2026-07-06
 
 ### Added

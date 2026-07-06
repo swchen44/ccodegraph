@@ -218,6 +218,24 @@ class TestCLI(unittest.TestCase):
         self.assertIn("artifact:", out)
         self.assertIn("aligned", out)          # 剛建完 → 對齊
 
+    def test_status_health_and_issue_codes(self):
+        out = self.run_cli("status")
+        self.assertIn("health :", out)
+        env = {**os.environ, "CCODEGRAPH_CTAG_PATH": "/oops"}   # 拼錯
+        r = subprocess.run([sys.executable, CLI, "status", "-p", self.root],
+                           capture_output=True, text=True, env=env)
+        self.assertIn("ENV_UNKNOWN_VARS", r.stdout)
+        self.assertIn("CCODEGRAPH_CTAG_PATH", r.stdout)
+
+    def test_status_json_triage_fields(self):
+        import json as j
+        res = j.loads(self.run_cli("status", "--json"))
+        self.assertEqual(res["status_schema_version"], 1)
+        self.assertIn(res["health"], ("OK", "WARN", "ERROR"))
+        self.assertIsInstance(res["issues"], list)
+        self.assertTrue(res["tools"]["ctags"]["ok"])
+        self.assertEqual(res["tools"]["ctags"]["flavor"], "universal")
+
     def test_status_detects_drift(self):
         p = os.path.join(self.root, "drift_probe.c")
         with open(p, "w") as fh:
@@ -225,6 +243,7 @@ class TestCLI(unittest.TestCase):
         try:
             out = self.run_cli("status")
             self.assertIn("added=1", out)
+            self.assertIn("STALE_GRAPH", out)
             self.assertIn("build --incremental", out)
         finally:
             os.remove(p)

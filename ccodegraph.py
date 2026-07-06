@@ -1359,6 +1359,8 @@ def clink_import(root: str, db_path: str,
     hist = json.loads(hrow[0]) if hrow else []
     hist.append({"ts": time.strftime("%Y-%m-%dT%H:%M:%S"),
                  "action": "clink-import", "mode": mode,
+                 "calls": n_calls, "writes": n_writes, "dropped": n_drop,
+                 "confirmed": n_conf, "absent": n_abs,
                  "seconds": round(time.time() - t0, 1)})
     if hrow:
         con.execute("UPDATE meta SET value=? WHERE key='history'",
@@ -1719,34 +1721,78 @@ KNOWN_ENV = ["CCODEGRAPH_CTAGS_PATH", "CCODEGRAPH_CSCOPE_PATH",
 
 
 def q_status(root: str, db: str, full: bool = False) -> dict[str, Any]:
-    """維護動詞(ccq status 血統):偵錯分診的第一手資料——環境/工具版本/
-    env vars/skill/產物/出處/新鮮度,路徑全印。--full 給支援工程師看的完整版。"""
+    """維護動詞(ccq status 血統):偵錯分診的第一手資料。--full 給支援工程師。
+    JSON 版含 status_schema_version 與穩定 issues[] 代碼,供自動分診腳本用
+    (codex 支援工程師審查後補強)。"""
     import platform as _platform
-    res: dict[str, Any] = {"verb": "status", "root": root,
-                           "ccodegraph": VERSION,
+    issues: list[dict[str, str]] = []
+
+    def issue(sev: str, code: str, detail: str, action: str) -> None:
+        issues.append({"severity": sev, "code": code,
+                       "detail": detail, "action": action})
+
+    res: dict[str, Any] = {"verb": "status", "status_schema_version": 1,
+                           "root": root, "ccodegraph": VERSION,
+                           "ccodegraph_path": os.path.abspath(__file__),
+                           "cwd": os.getcwd(),
                            "python": sys.version.split()[0],
                            "platform": _platform.platform()}
     res["env"] = {k: os.environ.get(k) for k in KNOWN_ENV
                   if full or k in os.environ}
+    unknown = sorted(k for k in os.environ
+                     if k.startswith("CCODEGRAPH_") and k not in KNOWN_ENV)
+    res["env_unknown"] = unknown
+    if unknown:
+        issue("warn", "ENV_UNKNOWN_VARS",
+              f"未知的 CCODEGRAPH_* 變數(拼錯?):{', '.join(unknown)}",
+              f"合法名:{', '.join(KNOWN_ENV)}")
     tools = {}
     for t in ("ctags", "cscope", "clink", "git"):
         p = tool_path(t) if t != "clink" else CLINK_BIN
+        ok = True
+        flavor = None
         try:
             r = subprocess.run([p, "--version"], capture_output=True, text=True)
             ver = (r.stdout or r.stderr).splitlines()[0].strip() if \
                 (r.stdout or r.stderr) else "?"
+            if t == "ctags":
+                flavor = classify_ctags(r.stdout + r.stderr)
+                ok = flavor == "universal"
         except FileNotFoundError:
             ver = "not found"
+            ok = False
         env = f"CCODEGRAPH_{t.upper()}_PATH"
-        tools[t] = {"path": p, "version": ver,
+        tools[t] = {"path": p, "version": ver, "ok": ok, "flavor": flavor,
                     "env_override": env in os.environ
                     or (t == "clink" and "CCODEGRAPH_CLINK" in os.environ)}
+        if not ok and t in ("ctags", "cscope"):
+            code = ("CTAGS_NOT_UNIVERSAL" if t == "ctags" and flavor
+                    else f"TOOL_MISSING_{t.upper()}")
+            issue("error", code, f"{t}: {ver}(path={p})",
+                  "見 build 錯誤訊息內的各平台安裝指引")
+        if t == "clink" and not ok:
+            issue("info", "CLINK_MISSING",
+                  "clink 未安裝——語意層(選配)不可用",
+                  "可忽略;要裝見 README 進階章")
     res["tools"] = tools
     found = [os.path.expanduser(d) for d in SKILL_INSTALL_DIRS
              if os.path.exists(os.path.join(os.path.expanduser(d), "SKILL.md"))]
-    res["skill"] = {"installed": found,
+    embedded_hash = hashlib.sha256(SKILL_MD.encode()).hexdigest()
+    stale_at = []
+    for d in found:
+        with open(os.path.join(d, "SKILL.md"), "rb") as fh:
+            if hashlib.sha256(fh.read()).hexdigest() != embedded_hash:
+                stale_at.append(d)
+    res["skill"] = {"installed": found, "stale": stale_at,
                     "hint": None if found else
                     "ccodegraph.py skill > ~/.claude/skills/ccodegraph/SKILL.md"}
+    if not found:
+        issue("info", "SKILL_MISSING", "agent skill 未安裝",
+              "ccodegraph.py skill > ~/.claude/skills/ccodegraph/SKILL.md")
+    elif stale_at:
+        issue("warn", "SKILL_STALE",
+              f"已安裝的 SKILL 與本版內容不同:{'; '.join(stale_at)}",
+              "重跑 skill 動詞覆蓋安裝")
     pdir = os.path.join(root, PRODUCTS_DIR)
     prods = []
     if os.path.isdir(pdir):
@@ -1762,6 +1808,10 @@ def q_status(root: str, db: str, full: bool = False) -> dict[str, Any]:
                         and not str(p["path"]).endswith(".clink.db")]
     if not os.path.exists(db):
         res["artifact"] = None
+        issue("error", "NO_GRAPH", f"沒有圖:{db}",
+              f"ccodegraph.py build -p {root}")
+        res["issues"] = issues
+        res["health"] = "ERROR"
         res["suggestion"] = f"no graph — run: ccodegraph.py build -p {root}"
         return res
     con = sqlite3.connect(f"file:{db}?mode=ro", uri=True)
@@ -1778,9 +1828,52 @@ def q_status(root: str, db: str, full: bool = False) -> dict[str, Any]:
     row = con.execute("SELECT git_rev FROM files WHERE git_rev IS NOT NULL "
                       "LIMIT 1").fetchone()
     art["built_at_git"] = row[0][:12] if row and row[0] else None
+    art["root_recorded"] = meta.get("root")
+    art["root_match"] = (os.path.realpath(meta.get("root", root))
+                         == os.path.realpath(root))
+    if not art["root_match"]:
+        issue("error", "ROOT_MISMATCH",
+              f"這張圖是為別的 root 建的:{meta.get('root')}",
+              "確認 -p / --db 是否配對錯誤,或重建")
+    if meta.get("schema_version") != "2":
+        issue("warn", "SCHEMA_OLD",
+              f"schema v{meta.get('schema_version')}(現行 v2)",
+              "重跑 build 升級")
     res["artifact"] = art
     head = git_head(root)
     res["git_now"] = head[:12] if head else None
+    if art["built_at_git"] and res["git_now"] \
+            and art["built_at_git"] != res["git_now"]:
+        issue("info", "GIT_MOVED",
+              f"建圖時 git={art['built_at_git']},現在 {res['git_now']}",
+              "drift 清單才是精確判準(hash 級)")
+    # clink 摘要(codex:匯入健康)
+    base = os.path.splitext(os.path.basename(db))[0]
+    cdbp = os.path.join(pdir, f"{base}.clink.db")
+    clink_info: dict[str, Any] = {"sidecar": cdbp,
+                                  "exists": os.path.exists(cdbp)}
+    last_imp = next((h for h in reversed(hist)
+                     if h.get("action") == "clink-import"), None)
+    clink_info["last_import"] = last_imp
+    res["clink"] = clink_info
+    if last_imp and "synthesized" in str(last_imp.get("mode", "")):
+        issue("info", "CLINK_SYNTHESIZED",
+              "語意層用合成 compile DB(無真實 -D,單 config 盲點)",
+              "有真 compile_commands.json 時放 root/build/ 或 --compdb")
+    # compile DB 覆蓋率
+    ccj = os.path.join(pdir, "compile_commands.json")
+    for cand in (os.path.join(root, "compile_commands.json"),
+                 os.path.join(root, "build", "compile_commands.json"), ccj):
+        if os.path.exists(cand):
+            try:
+                with open(cand, encoding="utf-8") as fh2:
+                    entries = len(json.load(fh2))
+            except (OSError, json.JSONDecodeError):
+                entries = -1
+            res["compile_db"] = {"path": cand, "entries": entries}
+            break
+    else:
+        res["compile_db"] = None
     old_hashes = dict(con.execute(
         "SELECT path, content_hash FROM files WHERE content_hash IS NOT NULL"))
     con.close()
@@ -1789,33 +1882,55 @@ def q_status(root: str, db: str, full: bool = False) -> dict[str, Any]:
     changed, added, deleted = compute_changes(old_hashes, new_hashes)
     drift = sorted(changed | added | deleted)
     res["drift"] = {"changed": len(changed), "added": len(added),
-                    "deleted": len(deleted), "files": drift[:5]}
+                    "deleted": len(deleted), "total": len(drift),
+                    "files": drift if full else drift[:5],
+                    "truncated": (not full) and len(drift) > 5}
+    if drift:
+        issue("warn", "STALE_GRAPH",
+              f"{len(drift)} 檔與圖不一致",
+              f"ccodegraph.py build --incremental -p {root}")
     res["suggestion"] = (
         f"{len(drift)} file(s) differ from the graph — run: "
         f"ccodegraph.py build --incremental -p {root}" if drift
         else "graph is aligned with the source tree")
+    res["issues"] = issues
+    sevs = {i["severity"] for i in issues}
+    res["health"] = ("ERROR" if "error" in sevs
+                     else "WARN" if "warn" in sevs else "OK")
     return res
 
 
 def render_status(res: dict[str, Any], full: bool = False) -> None:
     print(f"ccodegraph {res['ccodegraph']} status — {res['root']}")
+    print(f"health : {res.get('health', '?')}")
+    for i in res.get("issues", []):
+        print(f"  [{i['severity'].upper()}] {i['code']}: {i['detail']}")
+        print(f"           → {i['action']}")
     print(f"env    : python {res['python']} · {res['platform']}")
+    if full:
+        print(f"  ccodegraph_path = {res['ccodegraph_path']}")
+        print(f"  cwd = {res['cwd']}")
     if res["env"]:
         for k, v in res["env"].items():
             print(f"  {k} = {v if v is not None else '(unset)'}")
+    if res.get("env_unknown"):
+        print(f"  !! 未知 CCODEGRAPH_* 變數:{', '.join(res['env_unknown'])}")
     print("tools:")
     for t, info in res["tools"].items():
         ov = "  (env override)" if info["env_override"] else ""
-        print(f"  {t:7s} {info['path']}  —  {info['version']}{ov}")
+        mark = "✓" if info.get("ok") else "✗"
+        print(f"  {mark} {t:7s} {info['path']}  —  {info['version']}{ov}")
     sk = res["skill"]
     if sk["installed"]:
-        print("skill  : " + "; ".join(sk["installed"]))
+        stale = f"(STALE: {'; '.join(sk['stale'])})" if sk.get("stale") else ""
+        print("skill  : " + "; ".join(sk["installed"]) + stale)
     else:
         print(f"skill  : not installed — {sk['hint']}")
     if res.get("databases"):
-        print("databases: " + "; ".join(res["databases"])
-              + "   (dumpdb --db <f> 看各自 metadata;自訂路徑外的 DB "
-                "status/reset 管不到)")
+        hint = ("   (dumpdb --db <f> 看 metadata;自訂路徑外的 DB "
+                "status/reset 管不到)" if full else "")
+        print("databases: " + "; ".join(
+            os.path.basename(d) for d in res["databases"]) + hint)
     if full:
         print("products:")
         for p in res["products"]:
@@ -1832,18 +1947,35 @@ def render_status(res: dict[str, Any], full: bool = False) -> None:
               f"v{art['schema_version']}, "
               f"{art['nodes']} nodes, {art['edges']} edges")
         for e in art["engines_run"]:
-            print(f"  engine: {e}")
+            layers = e.get("layers") or e.get("layer") or ""
+            print(f"  engine : {e.get('engine')} {layers} "
+                  f"mode={e.get('mode', '')} {e.get('seconds', '')}s")
         for h in art.get("history_tail", []):
             print(f"  history: {h.get('ts')} {h.get('action')}"
                   + (f" mode={h['mode']}" if h.get('mode') else ""))
         if art.get("built_at_git"):
-            print(f"  built at git {art['built_at_git']}"
-                  + (f"; now {res['git_now']}" if res.get("git_now") else ""))
+            m = "==" if art["built_at_git"] == res.get("git_now") else "≠"
+            print(f"  git    : built@{art['built_at_git']} {m} "
+                  f"now@{res.get('git_now')}")
+    ck = res.get("clink")
+    if ck:
+        li = ck.get("last_import")
+        if li:
+            print(f"clink  : sidecar={'✓' if ck['exists'] else '✗'} "
+                  f"last-import calls={li.get('calls')} "
+                  f"writes={li.get('writes')} dropped={li.get('dropped')} "
+                  f"confirmed={li.get('confirmed')} absent={li.get('absent')}")
+        else:
+            print("clink  : 尚未匯入(選配;clink-import)")
+    cdb = res.get("compile_db")
+    if cdb:
+        print(f"compile_db: {cdb['path']}({cdb['entries']} entries)")
         d = res["drift"]
         if d["files"]:
-            print(f"drift  : changed={d['changed']} added={d['added']} "
-                  f"deleted={d['deleted']}: {', '.join(d['files'])}"
-                  + (" …" if d["changed"] + d["added"] + d["deleted"] > 5 else ""))
+            print(f"drift  : total={d['total']} (changed={d['changed']} "
+                  f"added={d['added']} deleted={d['deleted']}): "
+                  f"{', '.join(d['files'])}"
+                  + (" …(--full 全列)" if d.get("truncated") else ""))
     print(f"→ {res['suggestion']}")
 
 
