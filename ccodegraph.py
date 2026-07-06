@@ -1970,12 +1970,12 @@ def render_status(res: dict[str, Any], full: bool = False) -> None:
     cdb = res.get("compile_db")
     if cdb:
         print(f"compile_db: {cdb['path']}({cdb['entries']} entries)")
-        d = res["drift"]
-        if d["files"]:
-            print(f"drift  : total={d['total']} (changed={d['changed']} "
-                  f"added={d['added']} deleted={d['deleted']}): "
-                  f"{', '.join(d['files'])}"
-                  + (" …(--full 全列)" if d.get("truncated") else ""))
+    d = res.get("drift")
+    if d and d["files"]:
+        print(f"drift  : total={d['total']} (changed={d['changed']} "
+              f"added={d['added']} deleted={d['deleted']}): "
+              f"{', '.join(d['files'])}"
+              + (" …(--full 全列)" if d.get("truncated") else ""))
     print(f"→ {res['suggestion']}")
 
 
