@@ -200,7 +200,17 @@ def summarize(out_path: str) -> dict[str, Any]:
 
 def main() -> None:
     out_dir = sys.argv[1] if len(sys.argv) > 1 else "/tmp/hard-ab-v3"
-    only = set(sys.argv[2:]) or None
+    # v4:`tools=ccodegraph[,none…]` 參數只跑指定 arm(改良後單臂重跑用),
+    # 其餘位置參數仍是題號過濾。
+    tool_filter: tuple[str, ...] = TOOLS
+    rest = []
+    for argv_item in sys.argv[2:]:
+        if argv_item.startswith("tools="):
+            tool_filter = tuple(argv_item.split("=", 1)[1].split(","))
+            assert all(t in TOOLS for t in tool_filter), tool_filter
+        else:
+            rest.append(argv_item)
+    only = set(rest) or None
     os.makedirs(out_dir, exist_ok=True)
     summary_path = os.path.join(out_dir, "summary.json")
     summary: list[dict[str, Any]] = []
@@ -213,7 +223,7 @@ def main() -> None:
     for q in questions:
         if only and q["id"] not in only:
             continue
-        for tool in TOOLS:
+        for tool in tool_filter:
             if (q["id"], tool) in done:
                 print(f"=== {q['id']} tool={tool} — already done, skip ===",
                      flush=True)

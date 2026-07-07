@@ -1,6 +1,6 @@
 ---
 name: ccodegraph
-description: Use when navigating or refactoring C/C++ — who calls a function, what it calls, who reads/writes a global, who uses a macro, impact of a change, fn-pointer/callback dispatch, files including a header, co-changing files. Triggers on "誰呼叫", "who calls", "callers of", "who writes", "impact of", "爆炸半徑", "巨集哪裡用", "co-change", or any task needing many grep/Read calls over C/C++. Zero build needed. Every answer carries origin + confidence + tags. C first-class; C++ best-effort.
+description: Invoke FIRST, before running any ccodegraph.py command — this file embeds the complete command cheatsheet, DB schema, and token discipline (without it you will waste calls discovering syntax). Use when navigating or refactoring C/C++ — who calls a function, what it calls, who reads/writes a global, who uses a macro, impact of a change, fn-pointer/callback dispatch, files including a header, co-changing files. Triggers on "誰呼叫", "who calls", "callers of", "who writes", "impact of", "爆炸半徑", "巨集哪裡用", "co-change", or any task needing many grep/Read calls over C/C++. Zero build needed. Every answer carries origin + confidence + tags. C first-class; C++ best-effort.
 ---
 
 # ccodegraph — C/C++ knowledge graph (SQLite, honesty-labelled)
