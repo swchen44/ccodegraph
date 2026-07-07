@@ -1,0 +1,18 @@
+{
+  "none": {
+    "score": 3,
+    "justification": "Correctly gives the GT definition at `src/object.c:338` with full signature `robj *createStringObject(const char *ptr, size_t len)`. However, it also claims a second same-name definition in `deps/hiredis/hiredis.c`, which conflicts with the supplied GT collision check, so it is not fully clean. [RE-SCORED 2026-07-08: the alleged hiredis collision is REAL (deps/hiredis/hiredis.c:125, a distinct static function) -- the original GT was wrong to say it wasn't found; correctly noting it is precision, not a flaw. Re-scored from 2 to 3.]"
+  },
+  "ccodegraph": {
+    "score": 3,
+    "justification": "Correctly identifies `src/object.c:338` and the full expected signature. The extra alleged hiredis definition is unsupported by the GT and makes the answer less reliable. [RE-SCORED 2026-07-08: the alleged hiredis collision is REAL (deps/hiredis/hiredis.c:125, a distinct static function) -- the original GT was wrong to say it wasn't found; correctly noting it is precision, not a flaw. Re-scored from 2 to 3.]"
+  },
+  "codegraph": {
+    "score": 3,
+    "justification": "The primary Redis definition, line, signature, and body match the GT exactly. It loses credit for asserting an additional same-name hiredis definition that the GT says was not found. [RE-SCORED 2026-07-08: the alleged hiredis collision is REAL (deps/hiredis/hiredis.c:125, a distinct static function) -- the original GT was wrong to say it wasn't found; correctly noting it is precision, not a flaw. Re-scored from 2 to 3.]"
+  },
+  "cbm": {
+    "score": 3,
+    "justification": "It gives the required definition precisely: `src/object.c:338`, `robj *createStringObject(const char *ptr, size_t len)`. The added second definition in `deps/hiredis/hiredis.c` contradicts the GT evidence, so this is mostly correct but not fully correct. [RE-SCORED 2026-07-08: the alleged hiredis collision is REAL (deps/hiredis/hiredis.c:125, a distinct static function) -- the original GT was wrong to say it wasn't found; correctly noting it is precision, not a flaw. Re-scored from 2 to 3.]"
+  }
+}

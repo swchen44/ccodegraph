@@ -75,11 +75,32 @@ none of which is the one asked about:
 - `createRawStringObject` / `tryCreateRawStringObject` / `createEmbeddedStringObject`
   — helpers called *by* `createStringObject`, not the symbol itself.
 
-Only one function in the entire tree has the exact name `createStringObject` with a
-body: `src/object.c:338`. Confirmed via `grep -rn "\bcreateStringObject(" --include="*.c" --include="*.h" .`
-across the whole repo — all `.c` hits besides `object.c:338` are call sites (e.g.
-`src/t_string.c`, `src/db.c`, `src/rdb.c`, `src/module.c`, `src/cluster_legacy.c`,
-`src/notify.c`, `deps/hiredis/hiredis.c`, etc.), not redefinitions.
+**CORRECTION (2026-07-08, found during codex independent scoring of the v3 run)**:
+the original pass of this GT wrongly classified `deps/hiredis/hiredis.c` as merely a
+call site. It is not — `deps/hiredis/hiredis.c:125` is a **second, genuine, unrelated
+definition** of a function also named `createStringObject`:
+
+```
+60:  static void *createStringObject(const redisReadTask *task, char *str, size_t len);
+...
+125: static void *createStringObject(const redisReadTask *task, char *str, size_t len) {
+```
+
+This is a `static` (file-local) helper inside the vendored hiredis RESP-protocol
+parser (`deps/hiredis/`, a separate C client library bundled with redis-server, not
+part of it) — different return type (`void *` vs `robj *`), different parameter list
+(`const redisReadTask *task, char *str, size_t len` vs `const char *ptr, size_t len`),
+different purpose (building a reply object during RESP parsing vs allocating a
+redis-server string value), and `static` linkage means it cannot collide at link time
+with `src/object.c`'s `createStringObject` — but it is a textually real, same-name
+symbol that a whole-repo (non-`static`-aware) grep will legitimately surface.
+**Four independent agents in the v3 benchmark run all correctly surfaced this real
+second definition** (initially treated as a scoring flaw by the codex-graded pass
+that trusted this GT's original, incomplete claim — re-scored to full credit; noting
+the disambiguating symbol is precise, correct behavior, not a hallucination). Besides
+this one genuine collision, all other `.c` hits for `createStringObject` (`src/t_string.c`,
+`src/db.c`, `src/rdb.c`, `src/module.c`, `src/cluster_legacy.c`, `src/notify.c`, etc.)
+are confirmed call sites of `src/object.c:338`, not redefinitions.
 
 ## Build-system-level check (Makefile)
 
@@ -92,9 +113,10 @@ No Makefile-level trap applies to this question.
 
 Scope note: the question has no explicit scope limiter (e.g. no "only under src/",
 no "excluding tests/deps") — so this is a whole-repo lookup, and the whole-repo grep
-above (including `deps/hiredis/hiredis.c`, which defines its own unrelated
-`redisFormatCommand`-style helpers, not a colliding `createStringObject`) was run to
-be safe. No naming collision was found outside `src/object.c`.
+above was run to be safe. **Corrected 2026-07-08**: a real naming collision WAS found
+outside `src/object.c` — see the correction note above (`deps/hiredis/hiredis.c:125`,
+a distinct `static` function, different signature/purpose). Noting it correctly is a
+precision bonus and must NOT be treated as a flaw or hallucination when grading.
 
 ## Scoring rubric (0-3)
 

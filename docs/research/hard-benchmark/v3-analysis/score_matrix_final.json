@@ -1,0 +1,398 @@
+{
+  "WRQ-001": {
+    "none": {
+      "score": 3,
+      "justification": "Matches the canonical GT answer: `src/utils/eloop.c` at line 601 and reproduces the full 5-parameter `int` signature. It correctly treats `eloop.h:179` as a declaration only; it does not mention the Windows alternate, which is optional."
+    },
+    "ccodegraph": {
+      "score": 3,
+      "justification": "Gives the required canonical definition `src/utils/eloop.c:601` with the full correct signature. It also notes the `src/utils/eloop_win.c:237` Windows-only alternate while still identifying `eloop.c` as the relevant compiled/default definition."
+    },
+    "codegraph": {
+      "score": 3,
+      "justification": "Correctly identifies `src/utils/eloop.c:601` as the main POSIX/general definition with the full signature, and separately lists the Windows alternate at `src/utils/eloop_win.c:237`. The extra claim that the two implementation bodies are 'completely identical' except tracing is not needed for the requested answer, but it does not undermine the file/line/signature result."
+    },
+    "cbm": {
+      "score": 3,
+      "justification": "Correctly reports the canonical `src/utils/eloop.c:601` definition and full signature, and accurately distinguishes the Windows backend definition at `src/utils/eloop_win.c:237` plus the header declaration. This satisfies the GT rubric fully."
+    }
+  },
+  "WRQ-002": {
+    "none": {
+      "score": 3,
+      "justification": "Correctly gives the GT definition at `src/object.c:338` with full signature `robj *createStringObject(const char *ptr, size_t len)`. However, it also claims a second same-name definition in `deps/hiredis/hiredis.c`, which conflicts with the supplied GT collision check, so it is not fully clean. [RE-SCORED 2026-07-08: the alleged hiredis collision is REAL (deps/hiredis/hiredis.c:125, a distinct static function) -- the original GT was wrong to say it wasn't found; correctly noting it is precision, not a flaw. Re-scored from 2 to 3.]"
+    },
+    "ccodegraph": {
+      "score": 3,
+      "justification": "Correctly identifies `src/object.c:338` and the full expected signature. The extra alleged hiredis definition is unsupported by the GT and makes the answer less reliable. [RE-SCORED 2026-07-08: the alleged hiredis collision is REAL (deps/hiredis/hiredis.c:125, a distinct static function) -- the original GT was wrong to say it wasn't found; correctly noting it is precision, not a flaw. Re-scored from 2 to 3.]"
+    },
+    "codegraph": {
+      "score": 3,
+      "justification": "The primary Redis definition, line, signature, and body match the GT exactly. It loses credit for asserting an additional same-name hiredis definition that the GT says was not found. [RE-SCORED 2026-07-08: the alleged hiredis collision is REAL (deps/hiredis/hiredis.c:125, a distinct static function) -- the original GT was wrong to say it wasn't found; correctly noting it is precision, not a flaw. Re-scored from 2 to 3.]"
+    },
+    "cbm": {
+      "score": 3,
+      "justification": "It gives the required definition precisely: `src/object.c:338`, `robj *createStringObject(const char *ptr, size_t len)`. The added second definition in `deps/hiredis/hiredis.c` contradicts the GT evidence, so this is mostly correct but not fully correct. [RE-SCORED 2026-07-08: the alleged hiredis collision is REAL (deps/hiredis/hiredis.c:125, a distinct static function) -- the original GT was wrong to say it wasn't found; correctly noting it is precision, not a flaw. Re-scored from 2 to 3.]"
+    }
+  },
+  "WRQ-003": {
+    "none": {
+      "score": 3,
+      "justification": "Matches the GT on the required file `src/drivers/driver.h`, actual definition line 1633, closing line 3442, and the primary source-level function-pointer count of 142. It also gives a plausible uniqueness/count verification; lack of the optional build-config caveat does not make the requested answer incomplete."
+    },
+    "ccodegraph": {
+      "score": 3,
+      "justification": "Matches the GT exactly for file, definition line, struct span, and 142 function-pointer fields. The answer is grounded in direct source inspection and even supplies a field list; the missing optional 120-as-configured caveat is not required for full credit."
+    },
+    "codegraph": {
+      "score": 3,
+      "justification": "Correctly reports `src/drivers/driver.h:1633`, the 3442 end line, and 142 function-pointer fields, while excluding the two non-function-pointer `name` and `desc` fields. This satisfies the GT's primary grading target."
+    },
+    "cbm": {
+      "score": 3,
+      "justification": "Correctly gives the file, definition line 1633, end line 3442, and 142 function-pointer fields, with an `awk`/regex verification matching the GT method. The note that cbm itself lacked useful field data is transparent and does not undermine the source-based answer."
+    }
+  },
+  "WRQ-004": {
+    "none": {
+      "score": 3,
+      "justification": "Lists all 10 GT references with correct files and line numbers: 5 in src/utils/eloop.c and 5 in src/utils/eloop_win.c. It also correctly states that all are real code references and that there are no string/comment false positives."
+    },
+    "ccodegraph": {
+      "score": 3,
+      "justification": "Matches the GT exactly: both platform backend files, all 10 line numbers, definitions versus call sites, and no false positives. The static/file-local explanation is consistent with the GT."
+    },
+    "codegraph": {
+      "score": 3,
+      "justification": "Complete and precise answer: all 10 references are present with correct file:line locations and no extra entries. It also correctly distinguishes the helper from the public cancel APIs and notes no comments or string literals."
+    },
+    "cbm": {
+      "score": 3,
+      "justification": "Includes the full GT set of 10 references with correct line numbers across both files and no false positives. A couple call-context descriptions are slightly imprecise, but the referenced locations and inclusion/exclusion decisions are correct."
+    }
+  },
+  "WRQ-005": {
+    "none": {
+      "score": 3,
+      "justification": "Answer A exactly lists all 7 real src/t_string.c call sites at lines 128, 207, 543, 894, 1347, 1629, and 1630, and explicitly excludes the line 186 comment. It includes no out-of-scope references."
+    },
+    "ccodegraph": {
+      "score": 3,
+      "justification": "Answer B matches the GT line-for-line and explicitly excludes line 186 as a comment. The mention of the target definition in object.c is contextual, not counted as an extra reference."
+    },
+    "codegraph": {
+      "score": 3,
+      "justification": "Answer C gives the exact 7 real call sites and correctly notes that the line 186 occurrence is a comment excluded from the inventory. No out-of-file references are included in the counted list."
+    },
+    "cbm": {
+      "score": 3,
+      "justification": "Answer D lists exactly the 7 GT call lines and excludes the line 186 comment. Minor wording imprecision in context does not affect the correctness of the references or count."
+    }
+  },
+  "WRQ-006": {
+    "none": {
+      "score": 3,
+      "justification": "Correctly identifies the only by-name passing site as `qsort(a, alen, sizeof(int), freq_cmp);` inside `int_array_sort_unique()` at `src/utils/common.c:895`, and states there are no other repo occurrences beyond the definition."
+    },
+    "ccodegraph": {
+      "score": 3,
+      "justification": "Matches the GT exactly: single site, `int_array_sort_unique()`, `src/utils/common.c:895`, passed as the 4th argument to `qsort()`, with no extra transitive callers listed."
+    },
+    "codegraph": {
+      "score": 3,
+      "justification": "Fully correct: names the enclosing function, exact file and line, `qsort()` comparator argument, and explicitly says there are no direct calls or other by-name passing sites."
+    },
+    "cbm": {
+      "score": 2,
+      "justification": "The actual answer to the benchmark is correct: one site in `int_array_sort_unique()` at `src/utils/common.c:895` passed to `qsort()`. However, it adds a false verification claim that a `DEFINES` relation comes from `common.h`, contradicting the GT's note that there is no header prototype or `common.h` occurrence."
+    }
+  },
+  "WRQ-007": {
+    "none": {
+      "score": 1,
+      "justification": "It found the five GT functions, but its final answer explicitly expands the scope to setKey() paths and includes false positives such as getsetCommand, msetGenericCommand, msetexCommand, msetCommand, and msetnxCommand. That is the main exclusion the GT calls out, so the result is not a correct answer to the literal question."
+    },
+    "ccodegraph": {
+      "score": 3,
+      "justification": "It lists exactly the five GT functions with the correct direct/via-setGenericCommand distinction and line evidence. It does not include the out-of-scope setKey()/mset paths."
+    },
+    "codegraph": {
+      "score": 3,
+      "justification": "It lists exactly setGenericCommand plus the four callers of setGenericCommand, with correct line evidence and explicit exclusion of msetGenericCommand. Minor extra comments do not change the correctness."
+    },
+    "cbm": {
+      "score": 3,
+      "justification": "It gives exactly the five expected functions, separates the direct and indirect paths correctly, and cites the relevant call sites. It also keeps unrelated callers outside src/t_string.c out of scope."
+    }
+  },
+  "WRQ-008": {
+    "none": {
+      "score": 3,
+      "justification": "Matches the GT-required chain through processCommand/lookupCommand, indirect dispatch to setCommand, setGenericCommand, lookupKeyWriteWithLink, setKeyByLink, and explicitly gives the exists vs new-key split to dbSetValue vs dbAddByLink -> dbAddInternal. It goes beyond the GT into kvstore/dict, but that extra detail does not omit the required db.c branch split."
+    },
+    "ccodegraph": {
+      "score": 3,
+      "justification": "Fully covers the GT scoring points: dispatch through lookupCommand/processCommand/cmd->proc to setCommand, then setGenericCommand, lookupKeyWriteWithLink, setKeyByLink, and the overwrite/new-key branches dbSetValue vs dbAddByLink -> dbAddInternal with keyModified noted. Minor extra claims about terminal sinks are outside the rubric but do not undermine the required path."
+    },
+    "codegraph": {
+      "score": 3,
+      "justification": "Includes all required named hops and line references, including setKeyByLink and the branch split to dbSetValue for existing keys and dbAddByLink -> dbAddInternal for new keys. It also extends below db.c, but the GT-required dispatch and db.c write path are present."
+    },
+    "cbm": {
+      "score": 3,
+      "justification": "Identifies the required call chain and line references, including lookupKeyWriteWithLink, setKeyByLink, and the exists/new-key split to dbSetValue versus dbAddByLink -> dbAddInternal. The ordering of lookupCommand before processCommand is a bit awkward in the prose/table, but it still states lookupCommand is called from processCommand and satisfies the GT scoring criteria."
+    }
+  },
+  "WRQ-009": {
+    "none": {
+      "score": 2,
+      "justification": "The listed pairs match the GT through the visible portion, but the answer cuts off inside the ANDROID_P2P block at `get_noa` and omits the remaining tail of the struct. This is the benchmark's common 'stopped before the end' failure rather than a complete 96-pair answer."
+    },
+    "ccodegraph": {
+      "score": 2,
+      "justification": "Most visible pairs are correct, but the answer skips several GT-filled fields such as the TDLS block, ANDROID_P2P fields, `driver_cmd`, mesh fields, and the final tail is truncated at `get_pref_freq_list`. Despite claiming 96, the evidence does not show all 96 required pairs."
+    },
+    "codegraph": {
+      "score": 2,
+      "justification": "It correctly captures the early and middle portions, including TDLS and Android-specific blocks, but it explicitly reports only 84 fields and truncates around `set_qos_map`. It omits the later GT entries such as `set_wowlan`, roaming/MAC, mesh, bridge, TX TS, ACS, band, preferred frequency, and probable operating frequency fields."
+    },
+    "cbm": {
+      "score": 2,
+      "justification": "The answer is mostly correct for the visible unconditional portion but claims only 92 function-pointer fields and the provided list truncates at `get_pref_freq_l`. It omits or does not show multiple GT-required conditional and later fields, so it falls short of the full 96-pair reference."
+    }
+  },
+  "WRQ-010": {
+    "none": {
+      "score": 3,
+      "justification": "Correctly states that Redis core string dispatch does not use a function-pointer table and uses switch/if on encoding/type with direct calls, while moduleType/RedisModuleTypeMethods is the real ops table limited to OBJ_MODULE. It also distinguishes the wpa-style indirection from Redis core's enum-branching style."
+    },
+    "ccodegraph": {
+      "score": 3,
+      "justification": "Fully matches the GT: string and built-in types are switch/if-based, t_string.c has only INT fast-path checks, and moduleType/RedisModuleTypeMethods provides the module-only function-pointer dispatch via mv->type->free. Extra tool-derived details do not conflict with the ground truth."
+    },
+    "codegraph": {
+      "score": 3,
+      "justification": "Gives the essential correct conclusion that built-in string/list/set/hash dispatch is enum switch/if with direct calls, and that only module types use a moduleType/RedisModuleTypeMethods ops table like wpa. It has minor wording slippage around freeStringObject being a switch site, but immediately describes it as an if and does not alter the core answer."
+    },
+    "cbm": {
+      "score": 3,
+      "justification": "Correctly identifies that redisObject has no ops/vtable field, core type dispatch is via type/encoding switch or if statements, and OBJ_MODULE uses moduleType function pointers through mv->type->free. It is slightly terse on RedisModuleTypeMethods population, but the required indirection-style distinction is present and accurate."
+    }
+  },
+  "WRQ-011": {
+    "none": {
+      "score": 3,
+      "justification": "Correctly identifies the false premise that src/utils/list.c does not exist, gives the struct definition, and redirects to the header-only implementation. It lists all 6 static inline functions and the relevant macros including iteration/access/init macros."
+    },
+    "ccodegraph": {
+      "score": 3,
+      "justification": "Correctly flags the missing list.c file and lists the 6 header-defined static inline functions with accurate roles and line ranges. It also mentions the macro API, including iteration macros and the static init helpers, so it satisfies the GT despite organizing some macros outside the main table."
+    },
+    "codegraph": {
+      "score": 3,
+      "justification": "Fully matches the GT: it states list.c is nonexistent, provides the struct definition, lists all 6 static inline functions, and separately covers the macros including DL_LIST_HEAD_INIT, DEFINE_DL_LIST, and the for_each variants."
+    },
+    "cbm": {
+      "score": 3,
+      "justification": "Correctly reports that list.c does not exist and that the implementation is in list.h. It includes the struct definition, all 6 inline functions, and the associated access/iteration/init macros, matching the expected answer."
+    }
+  },
+  "WRQ-012": {
+    "none": {
+      "score": 2,
+      "justification": "Correctly identifies `struct redisObject` in `src/object.h`, the `robj`/`kvobj` typedef aliases, `refcount`, the three special refcount constants, and the role of `iskvobj` at zero. It over-includes `type`, `encoding`, and `metabits` as reference-counting behavior fields, which the GT explicitly treats as not part of the answer."
+    },
+    "ccodegraph": {
+      "score": 2,
+      "justification": "Gets the struct location, aliases, `refcount`, sentinel constants, `OBJ_FIRST_SPECIAL_REFCOUNT`, `iskvobj`, and correctly rejects `lru`. However it lists `type`, `encoding`, and `metabits` as indirect refcounting behavior, which is a false-positive relative to the GT rubric."
+    },
+    "codegraph": {
+      "score": 2,
+      "justification": "Mostly matches the GT: same `redisObject` struct, `robj`/`kvobj` aliases, `refcount`, special sentinel constants, and `iskvobj` zero-free path. It still adds `type` and `encoding` as fields affecting the reference-counting/release flow, which the GT says should not be counted as refcount-governing fields."
+    },
+    "cbm": {
+      "score": 2,
+      "justification": "Correct on the definition, aliasing, core `refcount` field, special constants, and the `iskvobj` deallocation-path relevance. It overstates `type`/`encoding` as part of the fields determining reference-counting behavior, contrary to the GT's exclusion of those fields."
+    }
+  },
+  "WRQ-013": {
+    "none": {
+      "score": 1,
+      "justification": "Answer A correctly finds the 14 CONFIG_SAE whole functions in src/ap/ieee802_11.c and the 9 partial functions, but it explicitly excludes the Makefile-gated src/common/sae.c functions. That misses the GT's major correction: 35 additional whole functions, so it is badly incomplete."
+    },
+    "ccodegraph": {
+      "score": 2,
+      "justification": "Answer B gets the 14 ieee802_11.c whole functions and all 9 partial functions, and it notices the build-system dependency for src/common/sae.c. However, it excludes those functions from the formal answer and gives the sae.c count as 34 rather than the GT's 35, so the final classification/count is not correct."
+    },
+    "codegraph": {
+      "score": 1,
+      "justification": "Answer C correctly identifies the non-sae.c ifdef-level functions, including all 9 partials and the ieee802_11.c whole block, but it excludes src/common/sae.c from the function count. Since the GT requires the 35 Makefile-gated sae.c functions as whole, this is substantially incomplete."
+    },
+    "cbm": {
+      "score": 3,
+      "justification": "Answer D includes the Makefile-gated src/common/sae.c whole functions, the 14 ieee802_11.c whole functions, all 9 partial functions, and correctly excludes wpa_supplicant/ siblings. Its displayed totals are off by one, but the actual function list and classifications match the GT."
+    }
+  },
+  "WRQ-014": {
+    "none": {
+      "score": 1,
+      "justification": "Badly incomplete: it claims USE_JEMALLOC appears only in zmalloc.c/debug.c and lists only 4 sites, missing the many src/ files and the Makefile build-system effect called out by the GT. It does classify its small subset correctly, and notes HAVE_BACKTRACE is in debug.c/crash reporting, but also undercounts it versus the GT."
+    },
+    "ccodegraph": {
+      "score": 1,
+      "justification": "Same core failure as Answer A: it asserts only two files and 4 USE_JEMALLOC sites, missing most allocator-gated files plus the required Makefile jemalloc build/link behavior. The subsystem classification for the subset it found is correct, but the inventory is far too incomplete."
+    },
+    "codegraph": {
+      "score": 2,
+      "justification": "Mostly correct: it adds the important #if defined(USE_JEMALLOC) sites across the Redis src tree and mentions Makefile involvement, with correct allocator classification. Real gaps remain: it still frames the strict #ifdef result as only 4, undercounts HAVE_BACKTRACE as 10 instead of the GT's 15 occurrences, misses some zmalloc.c details, and only lightly covers the full Makefile build/link/dependency effect."
+    },
+    "cbm": {
+      "score": 1,
+      "justification": "Badly incomplete: it reports only the 4 exact USE_JEMALLOC sites in zmalloc.c/debug.c and misses the broader allocator-gated source files and Makefile behavior required by the GT. Its classification of those found sites and HAVE_BACKTRACE as debug.c crash reporting is correct, but the answer is not close to a complete inventory."
+    }
+  },
+  "WRQ-015": {
+    "none": {
+      "score": 2,
+      "justification": "Answer A correctly identifies the 59 files with the literal bare include and correctly finds no headers including bare eloop.h, but it misses the GT's explicit trap: 58 additional .c files directly include the same physical header as \"utils/eloop.h\". The rubric caps answers stopping at 59 at 2/3."
+    },
+    "ccodegraph": {
+      "score": 3,
+      "justification": "Answer B gives the correct total of 117 direct .c includers, explicitly counts both \"eloop.h\" and \"utils/eloop.h\", and confirms no headers include eloop.h so the transitive closure adds nothing. Its conclusion matches the GT scoring dimension."
+    },
+    "codegraph": {
+      "score": 3,
+      "justification": "Answer C matches the GT: 59 bare includes plus 58 \"utils/eloop.h\" includes, zero overlap, 117 total direct includers, and zero header-mediated transitive additions. It also correctly explains why literal grep undercounts."
+    },
+    "cbm": {
+      "score": 2,
+      "justification": "Answer D has the same gap as A: it reports only the 59 bare \"eloop.h\" direct includers and concludes the closure matches 59, missing the 58 direct \"utils/eloop.h\" includers of the same physical header. Per the GT rubric, stopping at 59 is capped at 2/3."
+    }
+  },
+  "WRQ-016": {
+    "none": {
+      "score": 2,
+      "justification": "It gives the correct count, 70, and says the whole-repo scan found matches only under src/. However it only shows one grep-based counting method, so it lacks the second-method cross-check the GT rubric calls out for full credit."
+    },
+    "ccodegraph": {
+      "score": 2,
+      "justification": "It gives the correct final count of 70 and claims a ccodegraph-vs-grep cross-check, but the described 76 minus 5 .h files arithmetic is internally inconsistent, and the grep cross-check is scoped to src/ without explicitly verifying deps/, tests/, or modules/ add zero files."
+    },
+    "codegraph": {
+      "score": 3,
+      "justification": "It gives the exact count, 70, reports both a whole-repo grep and a CodeGraph imports query agreeing, and states all matching .c files are in src/. That satisfies the GT requirements including the no extra whole-repo matches point."
+    },
+    "cbm": {
+      "score": 3,
+      "justification": "It gives the exact count, 70, says the direct grep was run over the whole repo, states all matches are under src/, and notes each file has one live include with no duplicates/comments. This matches the GT and covers the relevant scope and duplicate checks."
+    }
+  },
+  "WRQ-017": {
+    "none": {
+      "score": 3,
+      "justification": "Correctly identifies all 10 allocation sites and separates the locally freed temporaries from the DB ownership-transfer cases. Minor caller-name imprecision for some functions does not affect the lifecycle classification."
+    },
+    "ccodegraph": {
+      "score": 3,
+      "justification": "Fully matches the GT: all local decrRefCount pairs are listed, including both lcsCommand temporaries, and all incr/incrbyfloat/increx new-value allocations are correctly treated as ownership transfers rather than leaks."
+    },
+    "codegraph": {
+      "score": 3,
+      "justification": "Fully correct per the rubric, with all 10 sites classified and the key ownership-transfer distinction for incrDecrCommand, incrbyfloatCommand, and increxCommand handled accurately."
+    },
+    "cbm": {
+      "score": 3,
+      "justification": "Correctly lists the local frees and the ownership-transfer allocations with the expected lines and functions. The small summary slip about distinct line count is harmless because the detailed classification matches the GT."
+    }
+  },
+  "WRQ-018": {
+    "none": {
+      "score": 3,
+      "justification": "Matches the GT: identifies 26 call sites, gives the no-leak verdict, and correctly distinguishes the 3 return-value ownership transfers plus the 7 ikev2_derive_sk_keys struct-field transfers. Minor naming typo around ikev2_derive_auth_data is not material."
+    },
+    "ccodegraph": {
+      "score": 3,
+      "justification": "Fully aligns with the GT: 26 sites across 19 functions, all relevant files covered, no leaks, and the tricky ikev2_derive_sk_keys partial-failure cleanup via ikev2_free_keys is handled correctly. It also correctly treats successful return/struct ownership transfers as non-leaks."
+    },
+    "codegraph": {
+      "score": 3,
+      "justification": "Correctly reports the 26 total call sites and the no-leak verdict, including the critical ownership-transfer cases and partial-failure cleanup in ikev2_derive_sk_keys. There is a small internal count inconsistency for ikev2_common.c, but the actual sites and reasoning are accounted for."
+    },
+    "cbm": {
+      "score": 2,
+      "justification": "The substantive lifetime reasoning is mostly correct and it does enumerate the important ownership-transfer cases, including the 7 SK_* allocations. However it explicitly claims only 24 call sites are the complete set, contradicting the GT's 26, and has some function-name inaccuracies, so it is not fully correct despite covering much of the evidence."
+    }
+  },
+  "WRQ-019": {
+    "none": {
+      "score": 3,
+      "justification": "Matches the GT on the substantive shared state: per-worker bio_jobs/bio_jobs_counter with bio_mutex, bio_newjob_cond, separate bio_comp_list/bio_mutex_comp, job_comp_pipe with no mutex, the three redisAtomic AOF fields, and immutable server.bio_cpulist. It does not separately list the mutex objects themselves as shared state, but it correctly identifies them as the protecting primitives and avoids the flagged exclusions."
+    },
+    "ccodegraph": {
+      "score": 2,
+      "justification": "Mostly correct and captures the key synchronization distinctions, including per-worker mutexes, separate bio_mutex_comp, pipe no-mutex behavior, atomics, and bio_cpulist. However it incorrectly includes bio_worker_title[] as shared state even though the GT explicitly flags it as non-shared for this question, so it is not fully correct."
+    },
+    "codegraph": {
+      "score": 2,
+      "justification": "Covers nearly all important state and protections, including bio_cpulist and the no-mutex pipe case. It misses the GT nuance that fsynced_reploff_pending has a plain pre-thread initialization assignment and describes atomics with a possible mutex fallback, contrary to the GT\u2019s lock-free-atomics guidance, so it has real but not fatal gaps."
+    },
+    "cbm": {
+      "score": 2,
+      "justification": "The core inventory is largely present, including separate bio_mutex_comp and the atomic AOF fields. But it over-includes flagged non-shared items such as bio_worker_title[]/bio_job_to_worker[], miscategorizes bioDrainWorker in the table, and does not clearly identify the POSIX PIPE_BUF write-atomicity reason for job_comp_pipe safety."
+    }
+  },
+  "WRQ-020": {
+    "none": {
+      "score": 2,
+      "justification": "Correctly answers no and gives strong file-level evidence: no lock/pthread/RCU symbols in eloop.c, plain dl_list/socket tables, and signal flags rather than locking. It does not include the GT-required repo-wide absence check for pthread_create/pthread_* symbols, so it falls short of full credit."
+    },
+    "ccodegraph": {
+      "score": 2,
+      "justification": "Correctly says no synchronization exists and supports it with file-level grep, structure details, and signal-handler behavior. It does not verify the repo-wide absence of pthread_create or pthread_* APIs, which the GT rubric requires for a 3."
+    },
+    "codegraph": {
+      "score": 2,
+      "justification": "Mostly correct: it identifies no locks/mutex/RCU, describes the unprotected timeout/socket structures, and distinguishes reentrancy flags from synchronization. The answer relies on a single-threaded assertion but does not provide the GT-required whole-repo pthread_create/pthread_* absence check."
+    },
+    "cbm": {
+      "score": 2,
+      "justification": "Correctly concludes no locks and gives useful evidence from eloop.c plus a broader-but-imprecise graph check for lock-like names. It still does not specifically confirm no pthread_create or pthread_* symbols repo-wide, so it misses the full-credit scoring dimension."
+    }
+  },
+  "WRQ-021": {
+    "none": {
+      "score": 2,
+      "justification": "It correctly recognizes that the real scan-trigger logic is in driver_nl80211_scan.c and lists most substantive failure conditions, but it misses the actual driver_nl80211.c scan wrapper driver_nl80211_scan2 entirely and instead elevates nl80211_cmd_msg as the in-file function. That violates the GT\u2019s key file-scope point, so it cannot receive full credit."
+    },
+    "ccodegraph": {
+      "score": 3,
+      "justification": "It explicitly identifies driver_nl80211_scan2 in driver_nl80211.c as a pure passthrough with no independent error conditions, and clearly separates the real scan failure logic in driver_nl80211_scan.c. The listed build, P2P, and kernel/AP-retry failure paths match the GT."
+    },
+    "codegraph": {
+      "score": 3,
+      "justification": "It gives the required file-scope answer: driver_nl80211.c contains only driver_nl80211_scan2, which has no error logic of its own. It then correctly labels the actual failure conditions as living in driver_nl80211_scan.c and enumerates the major distinct paths."
+    },
+    "cbm": {
+      "score": 3,
+      "justification": "It correctly states that driver_nl80211.c only has the thin driver_nl80211_scan2 wrapper and that the scan-trigger logic is in the separate driver_nl80211_scan.c translation unit. Its enumeration of message-build, P2P rate-mask, and send/AP fallback failures aligns with the GT."
+    }
+  },
+  "WRQ-022": {
+    "none": {
+      "score": 3,
+      "justification": "Fully matches the GT: identifies object.c checkType/addReplyErrorObject as the construction site, traces both SET-only WRONGTYPE paths via GET and IFEQ/IFNE/IFDEQ/IFDNE, and notes plain SET overwrites without type-checking."
+    },
+    "ccodegraph": {
+      "score": 3,
+      "justification": "Fully correct: names src/object.c:887 as the actual reply write, distinguishes shared helper vs SET-specific call sites, covers both t_string.c:119 and SET ... GET via t_string.c:100 -> 467, and explicitly excludes plain SET."
+    },
+    "codegraph": {
+      "score": 2,
+      "justification": "Mostly correct on the construction site and the two branches, but its call-chain summary includes setnx/setex/psetex as feeding into the two WRONGTYPE paths without explaining the COMMAND_SET-only option gating, which is a real scope issue called out by the GT."
+    },
+    "cbm": {
+      "score": 3,
+      "justification": "Fully correct: pinpoints checkType/addReplyErrorObject as the actual construction, lists both SET-path triggers including the GET subcall and direct IFEQ-family check, and states that plain SET does not WRONGTYPE-check."
+    }
+  }
+}

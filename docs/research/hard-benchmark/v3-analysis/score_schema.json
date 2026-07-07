@@ -1,0 +1,23 @@
+{
+  "type": "object",
+  "properties": {
+    "none": {"type": "object", "properties": {
+      "score": {"type": "integer", "minimum": 0, "maximum": 3},
+      "justification": {"type": "string"}
+    }, "required": ["score", "justification"], "additionalProperties": false},
+    "ccodegraph": {"type": "object", "properties": {
+      "score": {"type": "integer", "minimum": 0, "maximum": 3},
+      "justification": {"type": "string"}
+    }, "required": ["score", "justification"], "additionalProperties": false},
+    "codegraph": {"type": "object", "properties": {
+      "score": {"type": "integer", "minimum": 0, "maximum": 3},
+      "justification": {"type": "string"}
+    }, "required": ["score", "justification"], "additionalProperties": false},
+    "cbm": {"type": "object", "properties": {
+      "score": {"type": "integer", "minimum": 0, "maximum": 3},
+      "justification": {"type": "string"}
+    }, "required": ["score", "justification"], "additionalProperties": false}
+  },
+  "required": ["none", "ccodegraph", "codegraph", "cbm"],
+  "additionalProperties": false
+}

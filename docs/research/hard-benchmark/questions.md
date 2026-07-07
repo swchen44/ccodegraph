@@ -2,7 +2,7 @@
 
 > 機器可讀版:`questions.jsonl`。分類架構:`taxonomy.md`。
 
-> `★ EXECUTED` 標記:原始 4 題(WRQ-008/009/013/017)是 v2 報告的真跑題(headless Claude Code A/B/C + 第三方工具),結果見 `../llm-ab-v2-hard-cases.md`。其餘 18 題原本只是文件化題庫,2026-07-07 為了 v3(全 22 題 × 4 工具)全部補建了嚴謹 GT 並標記執行,詳見各題 `evaluation_notes` 與對應的 `gt_WRQ-0XX.md` 檔案。
+> `★ EXECUTED` 標記:原始 4 題(WRQ-008/009/013/017)是 v2 報告的真跑題(headless Claude Code A/B/C + 第三方工具),結果見 `../llm-ab-v2-hard-cases.md`。其餘 18 題原本只是文件化題庫,2026-07-07/08 為了 v3(全 22 題 × 4 工具 × Sonnet 5)全部補建了嚴謹 GT 並標記執行,結果見 `../llm-ab-v3-full-suite.md`,詳見各題 `evaluation_notes` 與對應的 `gt_WRQ-0XX.md` 檔案。
 
 ## symbol-definition
 
@@ -22,7 +22,7 @@
 
 **Expected schema**: file, line, signature
 
-**Evaluation notes**: VERIFIED 2026-07-07. Definition: src/object.c:338, `robj *createStringObject(const char *ptr, size_t len)`. Declared at src/object.h:139 (not directly in server.h — server.h only pulls it in transitively via #include "object.h"). No Makefile gating (object.o compiled unconditionally). Confusable sibling names to watch for: tryCreateStringObject, createStringObjectFromLongLong(WithOptions/ForValue/WithSds), createStringObjectFromLongDouble. Full detail: gt_WRQ-002.md.
+**Evaluation notes**: VERIFIED 2026-07-07. Definition: src/object.c:338, `robj *createStringObject(const char *ptr, size_t len)`. Declared at src/object.h:139 (not directly in server.h — server.h only pulls it in transitively via #include "object.h"). No Makefile gating (object.o compiled unconditionally). Confusable sibling names to watch for: tryCreateStringObject, createStringObjectFromLongLong(WithOptions/ForValue/WithSds), createStringObjectFromLongDouble. Full detail: gt_WRQ-002.md. CORRECTION 2026-07-08: this GT originally missed a real second, unrelated definition at deps/hiredis/hiredis.c:125 (a static, different-signature helper in the vendored hiredis client parser) -- misclassified in the first pass as 'just a call site'. All 4 v3-round agents correctly surfaced this real collision; noting it is precise, correct behavior and must not be scored down. See gt_WRQ-002.md for the full correction.
 
 **Purpose(驗證目的)**: 對照組,驗證基本符號查找能力。
 
