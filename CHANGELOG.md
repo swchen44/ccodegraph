@@ -9,6 +9,27 @@ Pre-1.0 caveat (SemVer §4): anything MAY change at any time; the public API
 
 ## [Unreleased]
 
+### Added
+
+- **D16 explicit output truncation**: `callers`/`callees`/`explore` cap each
+  section at 40 rows by default; `sql` caps at 200 rows. New `--limit N` flag
+  overrides both (`0` = unlimited). Truncation is always explicit — the tail
+  line and `explore` section headers report the TRUE total, and `--json`
+  carries `total`/`truncated` fields — so enumeration answers stay correct
+  while a pathological-fan-in `callers` drops from ~28KB to ~2KB (v3 benchmark
+  token-hotspot finding, WRQ-005).
+
+### Changed
+
+- SKILL.md rewritten for token efficiency (13.1KB → 6.1KB): full command
+  cheatsheet with exact syntax (kills `--help` lookups), embedded DB schema
+  (kills the `schema`-first ritual), a measured token-discipline section
+  (scope queries in SQL, narrow Reads at cited file:line, COUNT cross-check
+  before claiming totals), trust-calibration and blind-spot guidance kept but
+  compressed. Driven by the v3 benchmark where ccodegraph was the most
+  expensive arm per correctness point (see
+  docs/research/llm-ab-v4-token-efficiency.md).
+
 ## [0.0.4] - 2026-07-07
 
 ### Added

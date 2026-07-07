@@ -199,14 +199,19 @@ class TestCLI(unittest.TestCase):
             self.assertEqual(fh.read().strip(), "*")
         self.assertFalse(os.path.exists(os.path.join(self.root, "cscope.out")))
 
-    def test_skill_verb_prints_risk_chapter(self):
+    def test_skill_verb_prints_trust_calibration(self):
+        # v4 skill 改版:RISK CHAPTER 壓縮為「Reading the labels」,內涵
+        # (confidence 語意/semantic 旗標/ambiguous 處理)必須仍在。
         r = subprocess.run([sys.executable, CLI, "skill"],
                            capture_output=True, text=True)
         assert r.returncode == 0, r.stderr
-        self.assertIn("RISK CHAPTER", r.stdout)
-        self.assertIn("semantic: confirmed | absent", r.stdout)
+        self.assertIn("Reading the labels", r.stdout)
+        self.assertIn("semantic:confirmed", r.stdout)
+        self.assertIn("semantic:absent", r.stdout)
         self.assertIn("ambiguous N candidates", r.stdout)
-        self.assertIn("asserted_by_user", r.stdout)
+        self.assertIn("user assertion", r.stdout)
+        # D16:輸出上限的教學必須在 skill 裡(截斷行為要有文件依據)
+        self.assertIn("--limit 0", r.stdout)
 
     def test_status_full_report(self):
         out = self.run_cli("status")

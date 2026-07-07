@@ -375,6 +375,32 @@ build 繼續跑完其餘符號。`build()` 結尾彙整警告(筆數 + 前 5 個
 警告);wpa 重跑邊數與 fix 前一致(無回歸);138 tests(新增 2 個:模擬非零 rc 應
 回空+記錄、成功案例不受影響)。
 
+## 8.5.5 D16:查詢輸出顯式截斷(2026-07-08,v3 token 熱點分析驅動)
+
+**發現經過**:v3 benchmark(22 題 × 4 工具,Sonnet 5,見
+`research/llm-ab-v3-full-suite.md`)的 token 熱點分析顯示 ccodegraph 是 4 個
+arm 中每分正確性成本最高者($0.138/point,比純 grep 基準貴 38%),且**最貴的
+題目是最簡單的題目**——固定開銷與無界輸出在便宜題目上占比最大。單一最大證據:
+WRQ-005 的 agent 對 `decrRefCount` 裸跑 `callers`,一次回傳 **27.8KB**(數百個
+repo 級 caller),而題目只問 `t_string.c` 一個檔案(答案 7 行)。
+
+**修法**:`callers`/`callees`/`explore` 每節預設截斷於 `DEFAULT_LIST_LIMIT`
+(40)筆;`sql` 逃生口預設 `SQL_ROW_CAP`(200)行;新 flag `--limit N` 覆蓋兩者,
+`0` = 不限。**設計原則:截斷永遠顯式、真實總數永遠可見**——文字尾行
+`… +N more (total T; use --limit 0 for all)`、`explore` 節標題印真實總數、JSON
+帶 `total`/`truncated` 欄位。隱性截斷會毀掉枚舉題(「list every…」)的正確性;
+顯式截斷 + 總數可見則保留了 agent 提高 limit 或改寫 scoped SQL 的決策權,同時
+把病態扇入的預設成本從 ~28KB 壓到 ~2KB。SKILL.md 同步改版(13,117B → 6,090B,
+cheatsheet 化 + token 紀律章 + 內嵌 DDL,移除「Step 0 必跑 schema」儀式——
+v3 實測該儀式(`--help`×7 + `schema`×12 + `status`×6)全是可避免的浪費)。
+
+**驗證**:真實 redis 圖上 `callers decrRefCount` 8,393B → 2,255B(41 行含截斷
+尾行,總數 144 可見);`--limit 0` 回到全量。新增 `tests/unit/test_limits.py`
+10 個測試(in-memory SQLite 合成圖,含「剛好等於上限不誤報」邊界);
+`test_cli.py` 的 skill 內容斷言同步更新。148 tests 全綠。效果的量化驗收
+(分數不降 + 成本下降)由 v4 benchmark 重跑判定,見
+`research/llm-ab-v4-token-efficiency.md`。
+
 ## 8.6 第二輪紅隊(文件盲區)處置(2026-07-05)
 
 報告:[reviews/2026-07-05-codex-docs-round2.md](reviews/2026-07-05-codex-docs-round2.md)。
@@ -400,6 +426,7 @@ vs 使用者原話「查詢層等 DB 完整後」)。測試缺口 T1-T8 入 road
 | D10 | 分工:機械工作給程式,LLM 做高階判斷 | ✅ | R4 查詢層設計 |
 | D14 | semantic:absent = 解析覆蓋洞,不是 config-gated 訊號 | ✅ 修正 D3 詮釋 | — |
 | D15 | cscope 單一符號內部錯誤 → warn+跳過,不中止整個 build | ✅ | — |
+| D16 | 查詢輸出顯式截斷(--limit,預設 40/節、sql 200 行;總數必可見) | ✅ | v4 benchmark 驗收 |
 
 ## 9. Roadmap(進度總覽;完成的打勾,順序即計畫。R=roadmap 項,R3=保留號未指派;T=測試缺口)
 
