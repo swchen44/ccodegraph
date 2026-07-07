@@ -7,7 +7,6 @@ and the 4 arms' raw answer text (from the v3 run JSONs). Ask codex (a
 different model/vendor, not Claude) to independently score each 0-3 with a
 justification, via --output-schema for structured output.
 """
-import glob
 import json
 import os
 import subprocess
@@ -109,7 +108,6 @@ def run_codex(prompt, out_path):
 def main():
     only = set(sys.argv[1:]) or None
     questions = load_questions()
-    results = {}
     for q in questions:
         qid = q["id"]
         if only and qid not in only:
