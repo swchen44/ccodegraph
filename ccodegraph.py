@@ -137,17 +137,22 @@ _SKILL_B64 = (
     "aWZ5IHRoZSByZWdpc3RyYXRpb24gc2l0ZQogIGJlZm9yZSBhc3NlcnRpbmcgYSBkaXNwYXRjaCB0"
     "YXJnZXQuCi0gTWFjcm8tR0VORVJBVEVEIGRlZmluaXRpb25zIChgREVGSU5FX1goZm9vKWAg4oaS"
     "IGBmb29faGFuZGxlcmApOiBpbnZpc2libGUgdG8KICB0ZXh0IGVuZ2luZXMg4oCUIGBzcWxgIExJ"
-    "S0UtaHVudCB0aGUgZ2VuZXJhdG9yLCB0aGVuIHJlYWQgdGhlIG1hY3JvLgotIE9iamVjdC1saWtl"
-    "IG1hY3JvIHVzYWdlLCBDKysgdGVtcGxhdGVzL292ZXJsb2FkcywgY29tcHV0ZWQgYCNpbmNsdWRl"
-    "YDogbm90CiAgKGZ1bGx5KSBtb2RlbGxlZCDigJQgZmFsbCBiYWNrIHRvIHNjb3BlZCBncmVwLgot"
-    "IEVtcHR5IHJlc3VsdCDiiaAgbm90aGluZyBleGlzdHM6IHJldHJ5IGAtLW1pbi1jb25mIDAuNWAs"
-    "IHRoZW4KICBgc3FsICLigKZuYW1lIExJS0UgJyVYJSciYCwgdGhlbiBncmVwLgoKIyMgRXJyb3Jz"
-    "Cgpgbm8gZ3JhcGhgIOKGkiBgYnVpbGQgLXAgPHJvb3Q+YCDCtyBgc3ltYm9sIG5vdCBmb3VuZGAg"
-    "4oaSIHNxbCBMSUtFIGh1bnQgwrcKYGZucHRyIOKApiBTVEFMRWAg4oaSIHJlYnVpbGQgwrcgYGNs"
-    "aW5rIG5vdCBmb3VuZGAg4oaSIG9wdGlvbmFsIGxheWVyLCBza2lwIGl0LgoKT3RoZXIgdmVyYnMg"
-    "KGB2aXpgL2BzdGF0dXNgL2ByZXNldGAvYGR1bXBkYmAvYHNraWxsYC9gYnVpbGRgL2BjbGluay1p"
-    "bXBvcnRgKQphcmUgc2V0dXAvaHVtYW4tZmFjaW5nIOKAlCBub3QgbmVlZGVkIHRvIGFuc3dlciBj"
-    "b2RlIHF1ZXN0aW9ucy4K"
+    "S0UtaHVudCB0aGUgZ2VuZXJhdG9yLCB0aGVuIHJlYWQgdGhlIG1hY3JvLgotICoqQ29uZmlnLWRl"
+    "cGVuZGVudCBjb2RlIGhhcyBUV08gZ2F0aW5nIG1lY2hhbmlzbXMqKjogaW4tZmlsZSBgI2lmZGVm"
+    "YCBBTkQKICBidWlsZC1zeXN0ZW0gZmlsZSBnYXRpbmcgKGBNYWtlZmlsZWA6IGBpZmRlZiBYIOKA"
+    "piBPQkpTICs9IGZvby5vYCBjb21waWxlcyB3aG9sZQogIGZpbGVzIG9ubHkgdW5kZXIgYSBmbGFn"
+    "IOKAlCBzdWNoIGZpbGVzIG9mdGVuIGNvbnRhaW4gemVybyBgI2lmZGVmYCB0aGVtc2VsdmVzKS4K"
+    "ICBGb3IgYW55ICJ3aGF0IGRlcGVuZHMgb24gQ09ORklHX1giIHF1ZXN0aW9uLCBncmVwIHRoZSBN"
+    "YWtlZmlsZXMgdG9vLgotIE9iamVjdC1saWtlIG1hY3JvIHVzYWdlLCBDKysgdGVtcGxhdGVzL292"
+    "ZXJsb2FkcywgY29tcHV0ZWQgYCNpbmNsdWRlYDogbm90CiAgKGZ1bGx5KSBtb2RlbGxlZCDigJQg"
+    "ZmFsbCBiYWNrIHRvIHNjb3BlZCBncmVwLgotIEVtcHR5IHJlc3VsdCDiiaAgbm90aGluZyBleGlz"
+    "dHM6IHJldHJ5IGAtLW1pbi1jb25mIDAuNWAsIHRoZW4KICBgc3FsICLigKZuYW1lIExJS0UgJyVY"
+    "JSciYCwgdGhlbiBncmVwLgoKIyMgRXJyb3JzCgpgbm8gZ3JhcGhgIOKGkiBgYnVpbGQgLXAgPHJv"
+    "b3Q+YCDCtyBgc3ltYm9sIG5vdCBmb3VuZGAg4oaSIHNxbCBMSUtFIGh1bnQgwrcKYGZucHRyIOKA"
+    "piBTVEFMRWAg4oaSIHJlYnVpbGQgwrcgYGNsaW5rIG5vdCBmb3VuZGAg4oaSIG9wdGlvbmFsIGxh"
+    "eWVyLCBza2lwIGl0LgoKT3RoZXIgdmVyYnMgKGB2aXpgL2BzdGF0dXNgL2ByZXNldGAvYGR1bXBk"
+    "YmAvYHNraWxsYC9gYnVpbGRgL2BjbGluay1pbXBvcnRgKQphcmUgc2V0dXAvaHVtYW4tZmFjaW5n"
+    "IOKAlCBub3QgbmVlZGVkIHRvIGFuc3dlciBjb2RlIHF1ZXN0aW9ucy4K"
 )
 SKILL_MD = base64.b64decode(_SKILL_B64).decode()
 # --- EMBEDDED_SKILL_END ---
@@ -2002,7 +2007,9 @@ token discipline: if the graph exists (.ccodegraph/graph.db) query it directly â
 no build/schema/status needed first. Scope sql by file (WHERE e.file LIKE 'src/x%')
 instead of bare callers on hot symbols. Outputs cap at 40/section and 200 sql rows
 with the TRUE TOTAL always shown (--limit 0 = all). Read cited file:line with a
-narrow offset/limit. Cross-check any claimed total with one COUNT(*) query."""
+narrow offset/limit. Cross-check any claimed total with one COUNT(*) query.
+config-flag questions: check BOTH in-file #ifdef AND Makefile-level file gating
+(ifdef X ... OBJS += foo.o gates whole files that contain no #ifdef at all)."""
 
 
 def main() -> None:

@@ -88,6 +88,10 @@ same-name definitions; the edge is attached to every viable one — pin by qname
   before asserting a dispatch target.
 - Macro-GENERATED definitions (`DEFINE_X(foo)` → `foo_handler`): invisible to
   text engines — `sql` LIKE-hunt the generator, then read the macro.
+- **Config-dependent code has TWO gating mechanisms**: in-file `#ifdef` AND
+  build-system file gating (`Makefile`: `ifdef X … OBJS += foo.o` compiles whole
+  files only under a flag — such files often contain zero `#ifdef` themselves).
+  For any "what depends on CONFIG_X" question, grep the Makefiles too.
 - Object-like macro usage, C++ templates/overloads, computed `#include`: not
   (fully) modelled — fall back to scoped grep.
 - Empty result ≠ nothing exists: retry `--min-conf 0.5`, then
