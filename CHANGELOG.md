@@ -18,6 +18,10 @@ Pre-1.0 caveat (SemVer §4): anything MAY change at any time; the public API
   carries `total`/`truncated` fields — so enumeration answers stay correct
   while a pathological-fan-in `callers` drops from ~28KB to ~2KB (v3 benchmark
   token-hotspot finding, WRQ-005).
+  **v4 benchmark acceptance (same 22 questions, Sonnet 5, codex-judged): score
+  58/66 -> 62/66, total cost -3%, cost per correctness point -9.4%, startup
+  ritual (--help/schema/status) eliminated entirely; full before/after report
+  in docs/research/llm-ab-v4-token-efficiency.md.**
 
 ### Changed
 

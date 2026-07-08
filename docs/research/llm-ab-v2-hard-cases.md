@@ -2,8 +2,9 @@
 
 > **後續**:2026-07-08 使用者要求把實驗規模擴大到題庫全部 22 題、換用
 > Sonnet 5、wpa 也建真實 compile DB、並加入 codex 獨立複核與 token 熱點分析,
-> 見 [`llm-ab-v3-full-suite.md`](llm-ab-v3-full-suite.md)。本檔案(v2)保留
-> 原樣作為 4 題先導實驗與 Opus 4.8 對照的紀錄。
+> 見 [`llm-ab-v3-full-suite.md`](llm-ab-v3-full-suite.md);v3 之後的 token 效率
+> 改善(D16)與 before/after 重跑見 [`llm-ab-v4-token-efficiency.md`](llm-ab-v4-token-efficiency.md)。
+> 本檔案(v2)保留原樣作為 4 題先導實驗與 Opus 4.8 對照的紀錄。
 
 > 動機:使用者對第一輪 5 題 A/B(`llm-ab.md`)的反饋——「太簡單,認不出差別」。
 > 仿 `linux-kernel-navigation-benchmark` 的分類法為 wpa_supplicant/redis 出了

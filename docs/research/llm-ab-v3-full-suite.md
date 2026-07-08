@@ -1,5 +1,10 @@
 # R4 驗收 v3:硬題全題庫(22 題)× 4 工具(Sonnet 5)、wpa 真實 build、codex 獨立複核、Token 熱點分析
 
+> **後續**:本報告的 token 熱點結論驅動了 D16 改善(輸出顯式截斷 + SKILL 重寫
+> + --help 內嵌教學),before/after 全量重跑與獨立完整報告見
+> [`llm-ab-v4-token-efficiency.md`](llm-ab-v4-token-efficiency.md)
+> (分數 58→62/66,每分成本 -9.4%)。
+
 > 動機:使用者看完 v2 報告(4 題 × 4 工具 × Opus 4.8,見 `llm-ab-v2-hard-cases.md`)
 > 後,要求把實驗規模大幅擴大:① headless 模型從 Opus 4.8 換成 **Sonnet 5**;
 > ② 從 4 題擴大到題庫**全部 22 題**;③ wpa 也要有**真實** compile_commands.json
