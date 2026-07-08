@@ -1,6 +1,6 @@
 [project]
 name = "ccodegraph"
-version = "0.0.4"
+version = "0.0.5"
 description = "ccodegraph:C/C++ 知識圖譜——整合 ctags/cscope/tree-sitter/clangd,多引擎分層填料、標注 origin/confidence"
 requires-python = ">=3.10"
 
@@ -10,6 +10,12 @@ target-version = "py310"
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B", "SIM", "RUF"]
+
+[tool.ruff.lint.per-file-ignores]
+# 內嵌的純文字 SKILL(triple-quoted 字串)有 6 行 >100 字元(frontmatter
+# description 與 cheatsheet 範例),字串字面值內放不了 noqa——僅此檔豁免
+# E501;其餘檔案行長照常檢查。見 tools/embed_skill.py docstring。
+"ccodegraph.py" = ["E501"]
 
 [tool.mypy]
 python_version = "3.10"

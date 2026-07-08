@@ -15,7 +15,6 @@ impact 預設不走(--ambiguous 全開);查詢預設門檻 confidence >= 0.7。
 from __future__ import annotations
 
 import argparse
-import base64
 import concurrent.futures as cf
 import hashlib
 import json
@@ -27,7 +26,7 @@ import sys
 import time
 from typing import Any
 
-VERSION = "0.0.4"
+VERSION = "0.0.5"
 
 Def = dict[str, Any]          # 節點 dict:name/kind/file/line_start/line_end/is_static/qname/id
 CscopeRow = tuple[str, str, int, str]   # (field2, file, line, text)
@@ -36,125 +35,114 @@ PRODUCTS_DIR = ".ccodegraph"          # 所有中間產物集中此處(ccq 經�
 DB_NAME = os.path.join(PRODUCTS_DIR, "graph.db")
 
 # --- EMBEDDED_SKILL_BEGIN(由 tools/embed_skill.py 生成,勿手改)---
-_SKILL_B64 = (
-    "LS0tCm5hbWU6IGNjb2RlZ3JhcGgKZGVzY3JpcHRpb246IEludm9rZSBGSVJTVCwgYmVmb3JlIHJ1"
-    "bm5pbmcgYW55IGNjb2RlZ3JhcGgucHkgY29tbWFuZCDigJQgdGhpcyBmaWxlIGVtYmVkcyB0aGUg"
-    "Y29tcGxldGUgY29tbWFuZCBjaGVhdHNoZWV0LCBEQiBzY2hlbWEsIGFuZCB0b2tlbiBkaXNjaXBs"
-    "aW5lICh3aXRob3V0IGl0IHlvdSB3aWxsIHdhc3RlIGNhbGxzIGRpc2NvdmVyaW5nIHN5bnRheCku"
-    "IFVzZSB3aGVuIG5hdmlnYXRpbmcgb3IgcmVmYWN0b3JpbmcgQy9DKysg4oCUIHdobyBjYWxscyBh"
-    "IGZ1bmN0aW9uLCB3aGF0IGl0IGNhbGxzLCB3aG8gcmVhZHMvd3JpdGVzIGEgZ2xvYmFsLCB3aG8g"
-    "dXNlcyBhIG1hY3JvLCBpbXBhY3Qgb2YgYSBjaGFuZ2UsIGZuLXBvaW50ZXIvY2FsbGJhY2sgZGlz"
-    "cGF0Y2gsIGZpbGVzIGluY2x1ZGluZyBhIGhlYWRlciwgY28tY2hhbmdpbmcgZmlsZXMuIFRyaWdn"
-    "ZXJzIG9uICLoqrDlkbzlj6siLCAid2hvIGNhbGxzIiwgImNhbGxlcnMgb2YiLCAid2hvIHdyaXRl"
-    "cyIsICJpbXBhY3Qgb2YiLCAi54iG54K45Y2K5b6RIiwgIuW3qOmbhuWTquijoeeUqCIsICJjby1j"
-    "aGFuZ2UiLCBvciBhbnkgdGFzayBuZWVkaW5nIG1hbnkgZ3JlcC9SZWFkIGNhbGxzIG92ZXIgQy9D"
-    "KysuIFplcm8gYnVpbGQgbmVlZGVkLiBFdmVyeSBhbnN3ZXIgY2FycmllcyBvcmlnaW4gKyBjb25m"
-    "aWRlbmNlICsgdGFncy4gQyBmaXJzdC1jbGFzczsgQysrIGJlc3QtZWZmb3J0LgotLS0KCiMgY2Nv"
-    "ZGVncmFwaCDigJQgQy9DKysga25vd2xlZGdlIGdyYXBoIChTUUxpdGUsIGhvbmVzdHktbGFiZWxs"
-    "ZWQpCgpPbmUgZ3JhcGggYXQgYDxyb290Pi8uY2NvZGVncmFwaC9ncmFwaC5kYmA7IGV2ZXJ5IGVk"
-    "Z2Ugc3RhbXBlZCAqKm9yaWdpbiArCmNvbmZpZGVuY2UgKyB0YWdzKiouICoqSWYgYGdyYXBoLmRi"
-    "YCBleGlzdHMgdGhlIGdyYXBoIGlzIHJlYWR5IOKAlCBxdWVyeSBpdApkaXJlY3RseS4gRG8gTk9U"
-    "IHJ1biBgYnVpbGRgL2BzY2hlbWFgL2BzdGF0dXNgIGZpcnN0LioqIE9ubHkgdHdvIGV4Y2VwdGlv"
-    "bnM6CmEgcXVlcnkgZXJyb3JzIGBubyBncmFwaGAg4oaSIGBidWlsZCAtcCA8cm9vdD5gIG9uY2U7"
-    "IHlvdSBqdXN0IGVkaXRlZCBzb3VyY2Ug4oaSCmBidWlsZCAtLWluY3JlbWVudGFsYCAoY2hlYXAs"
-    "IGV4YWN0KSB0aGVuIHJlLXF1ZXJ5LgoKIyMgQ29tbWFuZCBjaGVhdHNoZWV0IChjb3B5IGV4YWN0"
-    "bHkg4oCUIHRoaXMgZmlsZSBpcyB0aGUgY29tcGxldGUgcmVmZXJlbmNlOyBuZXZlciBydW4gYC0t"
-    "aGVscGApCgpgYGBiYXNoCi4vY2NvZGVncmFwaC5weSBleHBsb3JlIDxzeW0+IC1wIC4gICAgICAg"
-    "ICMgZGVmKGZpbGU6bGluZSxzaWduYXR1cmUpK2NhbGxlcnMrY2FsbGVlcytnbG9iYWxzIOKAlCBE"
-    "RUZBVUxUIGZpcnN0IG1vdmUKLi9jY29kZWdyYXBoLnB5IGNhbGxlcnMgPHN5bT4gLXAgLiAgICAg"
-    "ICAgIyBkZWR1cGVkIGNhbGxlcnMsIG9uZSBzaXRlICsgKE4gc2l0ZXMpOyBpbmNsdWRlcyBbZm5w"
-    "dHJdL1tjYWxsYmFja10gaW5kaXJlY3QKLi9jY29kZWdyYXBoLnB5IGNhbGxlZXMgPHN5bT4gLXAg"
-    "LgouL2Njb2RlZ3JhcGgucHkgaW1wYWN0IDxzeW0+IC1kIDIgLXAgLiAgICAjIGNoYW5nZSByYWRp"
-    "dXM7IGlmIGl0IGhpbnRzIGFib3V0IGFtYmlndW91cyBlZGdlcywgcmVydW4gd2l0aCAtLWFtYmln"
-    "dW91cwouL2Njb2RlZ3JhcGgucHkgZ2xvYmFscyA8dmFyPiAtcCAuICAgICAgICAjIHdyaXRlcnMg"
-    "dnMgcmVhZGVycywgc2VwYXJhdGVkCi4vY2NvZGVncmFwaC5weSB2YXJzLW9mIDxmbj4gLXAgLiAg"
-    "ICAgICAgICMgZ2xvYmFscyA8Zm4+IHRvdWNoZXMsIFtyZWFkc10vW3dyaXRlc10KLi9jY29kZWdy"
-    "YXBoLnB5IHdoby1pbmNsdWRlcyA8aGRyPiAtcCAuICAgIyBESVJFQ1QgaW5jbHVkZXJzLCBhbGwg"
-    "I2luY2x1ZGUgc3BlbGxpbmcgdmFyaWFudHMsIGRlZHVwZWQKLi9jY29kZWdyYXBoLnB5IGNvLWNo"
-    "YW5nZWQgPGZpbGU+IC1wIC4gICAgIyBnaXQgY28tY2hhbmdlIHN0YXRpc3RpY3MgKGNvbmYgMC41"
-    "MCwgbm90IHNlbWFudGljcykKLi9jY29kZWdyYXBoLnB5IHNxbCAiU0VMRUNUIOKApiBMSU1JVCA1"
-    "MCIgLXAgLiAgICMgcmVhZC1vbmx5IGVzY2FwZSBoYXRjaDsgQUxXQVlTIExJTUlUIG9yIGFnZ3Jl"
-    "Z2F0ZQpgYGAKCmA8c3ltPmAgPSBwbGFpbiBuYW1lIChgZWxvb3BfaW5pdGApIG9yIHFuYW1lIGAn"
-    "c3JjL3V0aWxzL2Vsb29wLmM6OmVsb29wX2luaXQnYAoocXVvdGUgaXQpLiBTYW1lIG5hbWUgZGVm"
-    "aW5lZCBpbiBzZXZlcmFsIHBsYWNlcyDihpIgcGVyLWRlZmluaXRpb24gc2VjdGlvbnM7IHBpbgpv"
-    "bmUgd2l0aCB0aGUgcW5hbWUuIEFsbCB2ZXJicyB0YWtlIGAtLWpzb25gOyBmbGFnczogYC0tbWlu"
-    "LWNvbmYgMC43YCAoZGVmYXVsdCksCmAtLWFtYmlndW91c2AsIGAtLWRiIDxwYXRoPmAsIGAtLWxp"
-    "bWl0IE5gLgoKU2FtcGxlIChgY2FsbGVycyBhcHBfaW5pdGApOiBgLSBkb19zdGFydCBAIGNhbGxl"
-    "ci5jOjMgKDIgc2l0ZXMpIFtjc2NvcGU7IGFtYmlndW91cyAyIGNhbmRpZGF0ZXM7IHNlbWFudGlj"
-    "OmNvbmZpcm1lZF1gCgoqKk91dHB1dCBjYXBzKio6IGBjYWxsZXJzYC9gY2FsbGVlc2AvYGV4cGxv"
-    "cmVgIHByaW50IOKJpDQwIHJvd3MgcGVyIHNlY3Rpb24sIHRoZW4KYOKApiArTiBtb3JlICh0b3Rh"
-    "bCBUOyB1c2UgLS1saW1pdCAwIGZvciBhbGwpYDsgYHNxbGAgc3RvcHMgYXQgMjAwIHJvd3Mgd2l0"
-    "aCBhbgpleHBsaWNpdCB0cnVuY2F0aW9uIG5vdGljZS4gVGhlIFRSVUUgVE9UQUwgaXMgYWx3YXlz"
-    "IHJlcG9ydGVkIOKAlCBmb3IgYSBmdWxsCmVudW1lcmF0aW9uIHJlcnVuIHdpdGggYC0tbGltaXQg"
-    "MGAgb3IgYSBzY29wZWQgc3FsIHF1ZXJ5OyBuZXZlciB0cmVhdCBhCnRydW5jYXRlZCBsaXN0IGFz"
-    "IGNvbXBsZXRlLgoKIyMgVG9rZW4gZGlzY2lwbGluZSAobWVhc3VyZWQg4oCUIHRoaXMgaXMgd2hh"
-    "dCBtYWtlcyB0aGUgZ3JhcGggcGF5IGZvciBpdHNlbGYpCgoxLiAqKkdyYXBoIGZpcnN0LCB0aGVu"
-    "IG5hcnJvdyBSZWFkKio6IHRoZSBncmFwaCBjaXRlcyBleGFjdCBgZmlsZTpsaW5lYCDigJQgUmVh"
-    "ZAogICB3aXRoIG9mZnNldC9saW1pdCBhcm91bmQgaXQuIE5ldmVyIHdob2xlLWZpbGUgUmVhZCwg"
-    "bmV2ZXIgYGxzYCB0aGUgcmVwbyByb290CiAgIChmaWxlIGxpc3Q6IGBzcWwgIlNFTEVDVCBxbmFt"
-    "ZSBGUk9NIG5vZGVzIFdIRVJFIGtpbmQ9J2ZpbGUnIEFORCBxbmFtZSBMSUtFICcleCUnIExJTUlU"
-    "IDIwImApLgoyLiAqKlNjb3BlIHF1ZXJpZXMgdG8gdGhlIHF1ZXN0aW9uKio6IGFza2VkIGFib3V0"
-    "IG9uZSBmaWxlL2Rpcj8gRmlsdGVyIGluIFNRTCDigJQKICAgYHNxbCAiU0VMRUNUIHMucW5hbWUs"
-    "ZS5maWxlLGUubGluZSBGUk9NIGVkZ2VzIGUgSk9JTiBub2RlcyBzIE9OIHMuaWQ9ZS5zcmMKICAg"
-    "Sk9JTiBub2RlcyBkIE9OIGQuaWQ9ZS5kc3QgV0hFUkUgZC5uYW1lPSdYJyBBTkQgZS5raW5kPSdj"
-    "YWxscycgQU5EIGUuZmlsZQogICBMSUtFICdzcmMvZm9vJSciYCDigJQgZG8gTk9UIHJ1biBiYXJl"
-    "IGBjYWxsZXJzYCBvbiBhIGhpZ2gtZmFuLWluIHN5bWJvbAogICAoaHVuZHJlZHMgb2Ygcm93cyBm"
-    "b3IgemVybyB2YWx1ZSkuCjMuIGBleHBsb3JlYCBhbHJlYWR5IGJ1bmRsZXMgY2FsbGVycytjYWxs"
-    "ZWVzK2dsb2JhbHMg4oCUIGRvbid0IHJlLXF1ZXJ5IHRoZW0KICAgc2VwYXJhdGVseS4KNC4gKipC"
-    "ZWZvcmUgY2xhaW1pbmcgYW55IHRvdGFsLCBjcm9zcy1jaGVjayB3aXRoIG9uZSBgQ09VTlQoKilg"
-    "IHF1ZXJ5Kiog4oCUIG9uZQogICBjaGVhcCByb3cgdGhhdCBjYXRjaGVzIHRoZSBjbGFzc2ljIGhh"
-    "bmQtdGFsbHkgZXJyb3IuCjUuIFN0YXkgaW4gdGhlIHJlcG8gcm9vdCBhbmQgdXNlIGAtcCAuYDsg"
-    "ZG9uJ3QgYGNkYCBhcm91bmQuCgojIyBTY2hlbWEgKGVtYmVkZGVkIOKAlCBubyBuZWVkIHRvIHJ1"
-    "biB0aGUgYHNjaGVtYWAgdmVyYikKCmBgYApub2RlcyhpZCwgbmFtZSwgcW5hbWUsIGtpbmQ6IGZ1"
-    "bmN0aW9ufGdsb2JhbHxtYWNyb3xmaWxlLCBmaWxlLAogICAgICBsaW5lX3N0YXJ0LCBsaW5lX2Vu"
-    "ZCwgc2lnbmF0dXJlLCBpc19zdGF0aWMsIG9yaWdpbiwgY29uZmlkZW5jZSkKZWRnZXMoc3Jj4oaS"
-    "bm9kZXMuaWQsIGRzdOKGkm5vZGVzLmlkLAogICAgICBraW5kOiBjYWxsc3xjYWxsYmFja3xmbnB0"
-    "cnxyZWFkc3x3cml0ZXN8aW5jbHVkZXN8ZXhwYW5kc3xjb19jaGFuZ2VzLAogICAgICBmaWxlLCBs"
-    "aW5lLCBvcmlnaW4sIGNvbmZpZGVuY2UsIG1ldGEgSlNPTikgICAgICAtLSBvbmUgcm93IHBlciBT"
-    "SVRFCmVkZ2VfcGFpcnMgdmlldyAoc3JjLGRzdCxraW5kLGNvbmZpZGVuY2UsZmlyc3Rfc2l0ZSxz"
-    "aXRlX2NvdW50LG9yaWdpbnMpICAtLSBvbmUgcm93IHBlciBQQUlSCmBgYAoKIyMgUmVhZGluZyB0"
-    "aGUgbGFiZWxzICh0cnVzdCBjYWxpYnJhdGlvbiDigJQgc2F5IHdoYXQgdGhlIGxhYmVsIHNheXMp"
-    "Cgpjb25mIDEuMDAgYG1hbnVhbGAgKHVzZXIgYXNzZXJ0aW9uLCBub3QgcHJvb2YpIMK3IDAuOTUg"
-    "YGNsaW5rYCtyZWFsIGNvbXBpbGUgREIKKHNpbmdsZSBidWlsZCBjb25maWcgb25seSkgwrcgMC45"
-    "MyBgY2xpbmtgK3N5bnRoZXNpemVkIERCIMK3IDAuOTAgYGNzY29wZWAKKG5hbWUta2V5ZWQsIGAj"
-    "aWZkZWZgLWJsaW5kOiBncmVhdCByZWNhbGwsIHNhbWUtbmFtZWQgc3ltYm9scyBjYW4gbWlzLWJp"
-    "bmQpIMK3CjAuODAgYGZucHRyYCBoZXVyaXN0aWMgKGZpZWxkLWtleWVkOiBgLT5ydW4oKWAgbGlu"
-    "a3MgZXZlcnkgcmVnaXN0ZXJlZCBgcnVuYCkgwrcKMC43MCBgY2FsbGJhY2tgICh0aGUgb25seSBz"
-    "aWduYWwgZm9yIHFzb3J0LWNvbXBhcmF0b3IvdGltZXIgcXVlc3Rpb25zIOKAlCBwaHJhc2UKYXMg"
-    "InBvc3NpYmxlIGNhbGxlciB2aWEgY2FsbGJhY2siIHVubGVzcyB5b3UgcmVhZCB0aGUgY2l0ZWQg"
-    "c2l0ZSkgwrcgMC41MCBgZ2l0YC4KCmBbY3Njb3BlLCBjbGlua11gIG9uIG9uZSBlZGdlID0gdHdv"
-    "IGluZGVwZW5kZW50IGVuZ2luZXMgYWdyZWUgKHdpdGhpbiB0aGUKYWN0aXZlIGNvbmZpZykuIGBz"
-    "ZW1hbnRpYzpjb25maXJtZWRgID0gY2xpbmsgYWxzbyBzYXcgaXQgKHRva2VuLWxldmVsLCBpbmNs"
-    "dWRlcwppbmFjdGl2ZSBgI2lmZGVmYCByZWdpb25zKS4gYHNlbWFudGljOmFic2VudGAgPSBjbGlu"
-    "ayBuZXZlciBzdWNjZXNzZnVsbHkgcGFyc2VkCnRoZXJlIOKAlCBhIGNvdmVyYWdlIGZsYWcsIE5P"
-    "VCBhIGZhbHNpdHkgc2lnbmFsLiBgYW1iaWd1b3VzIE4gY2FuZGlkYXRlc2AgPQpzYW1lLW5hbWUg"
-    "ZGVmaW5pdGlvbnM7IHRoZSBlZGdlIGlzIGF0dGFjaGVkIHRvIGV2ZXJ5IHZpYWJsZSBvbmUg4oCU"
-    "IHBpbiBieSBxbmFtZTsKYGltcGFjdGAgc2tpcHMgYW1iaWd1b3VzIGJ5IGRlZmF1bHQgKHJlcnVu"
-    "IGAtLWFtYmlndW91c2Agd2hlbiBpdCBoaW50cykuCgojIyBCbGluZCBzcG90cyDigJQgZmxhZyB0"
-    "aGVzZSBwcm9hY3RpdmVseSB3aGVuIGFuc3dlci1yZWxldmFudAoKLSAqKlN0cnVjdC1maWVsZCBm"
-    "bi1wb2ludGVyIGRpc3BhdGNoKiogKGBjLT5vcHMtPnJ1bihjKWApOiBubyBkaXJlY3QgY2FsbCBl"
-    "ZGdlCiAgZXhpc3RzOyBgZm5wdHJgL2BjYWxsYmFja2AgZWRnZXMgYXJlIGhldXJpc3RpYy4gVmVy"
-    "aWZ5IHRoZSByZWdpc3RyYXRpb24gc2l0ZQogIGJlZm9yZSBhc3NlcnRpbmcgYSBkaXNwYXRjaCB0"
-    "YXJnZXQuCi0gTWFjcm8tR0VORVJBVEVEIGRlZmluaXRpb25zIChgREVGSU5FX1goZm9vKWAg4oaS"
-    "IGBmb29faGFuZGxlcmApOiBpbnZpc2libGUgdG8KICB0ZXh0IGVuZ2luZXMg4oCUIGBzcWxgIExJ"
-    "S0UtaHVudCB0aGUgZ2VuZXJhdG9yLCB0aGVuIHJlYWQgdGhlIG1hY3JvLgotICoqQ29uZmlnLWRl"
-    "cGVuZGVudCBjb2RlIGhhcyBUV08gZ2F0aW5nIG1lY2hhbmlzbXMqKjogaW4tZmlsZSBgI2lmZGVm"
-    "YCBBTkQKICBidWlsZC1zeXN0ZW0gZmlsZSBnYXRpbmcgKGBNYWtlZmlsZWA6IGBpZmRlZiBYIOKA"
-    "piBPQkpTICs9IGZvby5vYCBjb21waWxlcyB3aG9sZQogIGZpbGVzIG9ubHkgdW5kZXIgYSBmbGFn"
-    "IOKAlCBzdWNoIGZpbGVzIG9mdGVuIGNvbnRhaW4gemVybyBgI2lmZGVmYCB0aGVtc2VsdmVzKS4K"
-    "ICBGb3IgYW55ICJ3aGF0IGRlcGVuZHMgb24gQ09ORklHX1giIHF1ZXN0aW9uLCBncmVwIHRoZSBN"
-    "YWtlZmlsZXMgdG9vLgotIE9iamVjdC1saWtlIG1hY3JvIHVzYWdlLCBDKysgdGVtcGxhdGVzL292"
-    "ZXJsb2FkcywgY29tcHV0ZWQgYCNpbmNsdWRlYDogbm90CiAgKGZ1bGx5KSBtb2RlbGxlZCDigJQg"
-    "ZmFsbCBiYWNrIHRvIHNjb3BlZCBncmVwLgotIEVtcHR5IHJlc3VsdCDiiaAgbm90aGluZyBleGlz"
-    "dHM6IHJldHJ5IGAtLW1pbi1jb25mIDAuNWAsIHRoZW4KICBgc3FsICLigKZuYW1lIExJS0UgJyVY"
-    "JSciYCwgdGhlbiBncmVwLgoKIyMgRXJyb3JzCgpgbm8gZ3JhcGhgIOKGkiBgYnVpbGQgLXAgPHJv"
-    "b3Q+YCDCtyBgc3ltYm9sIG5vdCBmb3VuZGAg4oaSIHNxbCBMSUtFIGh1bnQgwrcKYGZucHRyIOKA"
-    "piBTVEFMRWAg4oaSIHJlYnVpbGQgwrcgYGNsaW5rIG5vdCBmb3VuZGAg4oaSIG9wdGlvbmFsIGxh"
-    "eWVyLCBza2lwIGl0LgoKT3RoZXIgdmVyYnMgKGB2aXpgL2BzdGF0dXNgL2ByZXNldGAvYGR1bXBk"
-    "YmAvYHNraWxsYC9gYnVpbGRgL2BjbGluay1pbXBvcnRgKQphcmUgc2V0dXAvaHVtYW4tZmFjaW5n"
-    "IOKAlCBub3QgbmVlZGVkIHRvIGFuc3dlciBjb2RlIHF1ZXN0aW9ucy4K"
-)
-SKILL_MD = base64.b64decode(_SKILL_B64).decode()
+SKILL_MD = '''\
+---
+name: ccodegraph
+description: Invoke FIRST, before running any ccodegraph.py command — this file embeds the complete command cheatsheet, DB schema, and token discipline (without it you will waste calls discovering syntax). Use when navigating or refactoring C/C++ — who calls a function, what it calls, who reads/writes a global, who uses a macro, impact of a change, fn-pointer/callback dispatch, files including a header, co-changing files. Triggers on "誰呼叫", "who calls", "callers of", "who writes", "impact of", "爆炸半徑", "巨集哪裡用", "co-change", or any task needing many grep/Read calls over C/C++. Zero build needed. Every answer carries origin + confidence + tags. C first-class; C++ best-effort.
+---
+
+# ccodegraph — C/C++ knowledge graph (SQLite, honesty-labelled)
+
+One graph at `<root>/.ccodegraph/graph.db`; every edge stamped **origin +
+confidence + tags**. **If `graph.db` exists the graph is ready — query it
+directly. Do NOT run `build`/`schema`/`status` first.** Only two exceptions:
+a query errors `no graph` → `build -p <root>` once; you just edited source →
+`build --incremental` (cheap, exact) then re-query.
+
+## Command cheatsheet (copy exactly — this file is the complete reference; never run `--help`)
+
+```bash
+./ccodegraph.py explore <sym> -p .        # def(file:line,signature)+callers+callees+globals — DEFAULT first move
+./ccodegraph.py callers <sym> -p .        # deduped callers, one site + (N sites); includes [fnptr]/[callback] indirect
+./ccodegraph.py callees <sym> -p .
+./ccodegraph.py impact <sym> -d 2 -p .    # change radius; if it hints about ambiguous edges, rerun with --ambiguous
+./ccodegraph.py globals <var> -p .        # writers vs readers, separated
+./ccodegraph.py vars-of <fn> -p .         # globals <fn> touches, [reads]/[writes]
+./ccodegraph.py who-includes <hdr> -p .   # DIRECT includers, all #include spelling variants, deduped
+./ccodegraph.py co-changed <file> -p .    # git co-change statistics (conf 0.50, not semantics)
+./ccodegraph.py sql "SELECT … LIMIT 50" -p .   # read-only escape hatch; ALWAYS LIMIT or aggregate
+```
+
+`<sym>` = plain name (`eloop_init`) or qname `'src/utils/eloop.c::eloop_init'`
+(quote it). Same name defined in several places → per-definition sections; pin
+one with the qname. All verbs take `--json`; flags: `--min-conf 0.7` (default),
+`--ambiguous`, `--db <path>`, `--limit N`.
+
+Sample (`callers app_init`): `- do_start @ caller.c:3 (2 sites) [cscope; ambiguous 2 candidates; semantic:confirmed]`
+
+**Output caps**: `callers`/`callees`/`explore` print ≤40 rows per section, then
+`… +N more (total T; use --limit 0 for all)`; `sql` stops at 200 rows with an
+explicit truncation notice. The TRUE TOTAL is always reported — for a full
+enumeration rerun with `--limit 0` or a scoped sql query; never treat a
+truncated list as complete.
+
+## Token discipline (measured — this is what makes the graph pay for itself)
+
+1. **Graph first, then narrow Read**: the graph cites exact `file:line` — Read
+   with offset/limit around it. Never whole-file Read, never `ls` the repo root
+   (file list: `sql "SELECT qname FROM nodes WHERE kind='file' AND qname LIKE '%x%' LIMIT 20"`).
+2. **Scope queries to the question**: asked about one file/dir? Filter in SQL —
+   `sql "SELECT s.qname,e.file,e.line FROM edges e JOIN nodes s ON s.id=e.src
+   JOIN nodes d ON d.id=e.dst WHERE d.name='X' AND e.kind='calls' AND e.file
+   LIKE 'src/foo%'"` — do NOT run bare `callers` on a high-fan-in symbol
+   (hundreds of rows for zero value).
+3. `explore` already bundles callers+callees+globals — don't re-query them
+   separately.
+4. **Before claiming any total, cross-check with one `COUNT(*)` query** — one
+   cheap row that catches the classic hand-tally error.
+5. Stay in the repo root and use `-p .`; don't `cd` around.
+
+## Schema (embedded — no need to run the `schema` verb)
+
+```
+nodes(id, name, qname, kind: function|global|macro|file, file,
+      line_start, line_end, signature, is_static, origin, confidence)
+edges(src→nodes.id, dst→nodes.id,
+      kind: calls|callback|fnptr|reads|writes|includes|expands|co_changes,
+      file, line, origin, confidence, meta JSON)      -- one row per SITE
+edge_pairs view (src,dst,kind,confidence,first_site,site_count,origins)  -- one row per PAIR
+```
+
+## Reading the labels (trust calibration — say what the label says)
+
+conf 1.00 `manual` (user assertion, not proof) · 0.95 `clink`+real compile DB
+(single build config only) · 0.93 `clink`+synthesized DB · 0.90 `cscope`
+(name-keyed, `#ifdef`-blind: great recall, same-named symbols can mis-bind) ·
+0.80 `fnptr` heuristic (field-keyed: `->run()` links every registered `run`) ·
+0.70 `callback` (the only signal for qsort-comparator/timer questions — phrase
+as "possible caller via callback" unless you read the cited site) · 0.50 `git`.
+
+`[cscope, clink]` on one edge = two independent engines agree (within the
+active config). `semantic:confirmed` = clink also saw it (token-level, includes
+inactive `#ifdef` regions). `semantic:absent` = clink never successfully parsed
+there — a coverage flag, NOT a falsity signal. `ambiguous N candidates` =
+same-name definitions; the edge is attached to every viable one — pin by qname;
+`impact` skips ambiguous by default (rerun `--ambiguous` when it hints).
+
+## Blind spots — flag these proactively when answer-relevant
+
+- **Struct-field fn-pointer dispatch** (`c->ops->run(c)`): no direct call edge
+  exists; `fnptr`/`callback` edges are heuristic. Verify the registration site
+  before asserting a dispatch target.
+- Macro-GENERATED definitions (`DEFINE_X(foo)` → `foo_handler`): invisible to
+  text engines — `sql` LIKE-hunt the generator, then read the macro.
+- **Config-dependent code has TWO gating mechanisms**: in-file `#ifdef` AND
+  build-system file gating (`Makefile`: `ifdef X … OBJS += foo.o` compiles whole
+  files only under a flag — such files often contain zero `#ifdef` themselves).
+  For any "what depends on CONFIG_X" question, grep the Makefiles too.
+- Object-like macro usage, C++ templates/overloads, computed `#include`: not
+  (fully) modelled — fall back to scoped grep.
+- Empty result ≠ nothing exists: retry `--min-conf 0.5`, then
+  `sql "…name LIKE '%X%'"`, then grep.
+
+## Errors
+
+`no graph` → `build -p <root>` · `symbol not found` → sql LIKE hunt ·
+`fnptr … STALE` → rebuild · `clink not found` → optional layer, skip it.
+
+Other verbs (`viz`/`status`/`reset`/`dumpdb`/`skill`/`build`/`clink-import`)
+are setup/human-facing — not needed to answer code questions.
+'''
 # --- EMBEDDED_SKILL_END ---
 CSCOPE_DB = os.path.join(PRODUCTS_DIR, "cscope.out")   # 專用索引,集中產物目錄(FR6)
 HEADER_EXTS = (".h", ".hpp", ".hh")

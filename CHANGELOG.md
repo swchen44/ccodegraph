@@ -9,6 +9,8 @@ Pre-1.0 caveat (SemVer §4): anything MAY change at any time; the public API
 
 ## [Unreleased]
 
+## [0.0.5] - 2026-07-08
+
 ### Added
 
 - **D16 explicit output truncation**: `callers`/`callees`/`explore` cap each
@@ -25,6 +27,12 @@ Pre-1.0 caveat (SemVer §4): anything MAY change at any time; the public API
 
 ### Changed
 
+- The embedded SKILL block in ccodegraph.py is now plain text (a readable
+  triple-quoted string) instead of base64 chunks — directly editable and
+  reviewable in place; `tools/embed_skill.py` regenerates it and fails loudly
+  on content that would break the literal (`'''`/backslash/CR). E501 is
+  file-scoped-ignored for ccodegraph.py only (6 long lines live inside the
+  string literal where noqa cannot).
 - SKILL.md rewritten for token efficiency (13.1KB → 6.1KB): full command
   cheatsheet with exact syntax (kills `--help` lookups), embedded DB schema
   (kills the `schema`-first ritual), a measured token-discipline section
