@@ -60,3 +60,9 @@ Tree-wide search (`*.c`, `*.h`, plus unscoped sweep of `tools/`, `scripts/`, `ar
 - **0** — Wrong file (e.g., cites `include/linux/sched/task.h` declaration as the definition), wrong function (e.g., `rcu_copy_process`), claims the function is static, or fabricated signature/line.
 
 Auto-fail notes for graders: "static" verdict must be explicit per the question; an answer that never addresses staticness caps at 1.
+
+
+## SUBTREE ADDENDUM(2026-07-10)
+
+執行樹為 8,170 檔子樹;copy_process 唯一性已在子樹重驗(kernel/fork.c:2240
+仍為唯一定義)。原 GT 全部有效。

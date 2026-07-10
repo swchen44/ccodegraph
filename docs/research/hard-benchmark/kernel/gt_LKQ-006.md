@@ -132,3 +132,16 @@ mentioning them as related variants is fine.
 Scoring note (prior-round lesson): reporting the existence of same-name definitions in
 vendored/tools directories is a verified fact — credit it. Only *misattributing* one of
 them as the kernel's definition is penalized.
+
+
+## SUBTREE ADDENDUM(2026-07-10,v5 執行樹變更)
+
+實際執行樹是 kernel v6.6 的 8,170 檔子樹(全樹三工具索引皆 DNF 後的使用者決策;
+子樹定義見報告)。在此子樹內,`#define container_of` 的「其他副本」為 **4 個**
+(tools/include/nolibc/types.h:232、tools/include/linux/kernel.h:35、
+scripts/kconfig/list.h:19、scripts/mod/list.h:18)——全樹的另外 5 個副本
+(radeon mkregtable、samples/bpf、bpf_helpers、rtla、usbip)不在子樹內。
+評分以子樹版為準:主定義 include/linux/container_of.h:18 不變;
+「其他副本」答 4 個(或列出上述檔案)= 滿分;答全樹的 9 個且列出的檔案
+不在樹內 = 按「引用了樹外事實」扣分。另注意 container_of.h:32 是
+`container_of_const`(不同巨集,不算副本)。

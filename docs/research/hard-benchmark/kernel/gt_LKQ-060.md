@@ -106,3 +106,9 @@ $ grep -n "ssize_t vfs_read" fs/read_write.c
 $ grep -rn "EXPORT_SYMBOL(vfs_read)" fs/
 (no output; nearest: fs/read_write.c:448 EXPORT_SYMBOL(kernel_read))
 ```
+
+
+## SUBTREE ADDENDUM(2026-07-10)
+
+執行樹為 8,170 檔子樹;已重驗 include/linux/fs.h:1964 仍是子樹內唯一
+vfs_read 宣告,fs/internal.h 無。原 GT 全部有效。

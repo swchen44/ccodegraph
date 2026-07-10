@@ -69,3 +69,11 @@ No defects. The presumed variable name `e1000e_netdev_ops` is exact; `.ndo_start
 - **0** — Wrong driver directory (e.g. legacy e1000's `e1000_netdev_ops` / `e1000_main.c`), hallucinated names/lines, or no verifiable evidence.
 
 Scoring note: answers citing the legacy e1000 driver's symbols for any piece score that piece as wrong — the scope limiter is literal.
+
+
+## SUBTREE ADDENDUM(2026-07-10)
+
+執行樹為 8,170 檔子樹:legacy e1000 driver 目錄(drivers/net/ethernet/intel/
+e1000/)**不在樹內**,原 GT 的「legacy driver 混淆陷阱」在此輪不會發作。
+其餘答案(e1000e_netdev_ops netdev.c:7327、e1000_xmit_frame :5781/:7330、
+註冊 :7451)不受影響。

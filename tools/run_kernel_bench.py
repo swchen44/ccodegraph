@@ -28,7 +28,9 @@ from typing import Any
 CCODEGRAPH_REPO = os.path.expanduser("~/git/ccodegraph")
 QUESTIONS_JSONL = os.path.join(
     CCODEGRAPH_REPO, "docs/research/hard-benchmark/kernel/questions-kernel.jsonl")
-KERNEL_GIT = os.path.expanduser("~/git/cbm-vs-codegraph-bench/repos/linux-v6.6")
+KERNEL_TAR = os.path.expanduser("~/kernel-bench/kernel-subtree.tar")
+# v5 執行樹 = 8,170 檔子樹(全樹三工具索引皆 DNF;子樹涵蓋全部 20 題範圍,
+# 樹域 GT 事實已重驗——見 gt_LKQ-001/006/035/060 的 SUBTREE ADDENDUM)
 WORK_BASE = os.path.expanduser("~/kernel-bench")
 
 CG_BIN = os.path.expanduser("~/.local/bin/codegraph")
@@ -42,7 +44,7 @@ REPS = 3
 # 完整性檢查抽樣(固定樣本,涵蓋各子系統;mtime 或缺檔即視為髒)
 SENTINELS = ["kernel/fork.c", "fs/read_write.c", "net/core/dev.c",
              "include/linux/sched.h", "drivers/net/ethernet/intel/e1000e/netdev.c",
-             "kernel/sched/core.c", "mm/memory.c", "MAINTAINERS"]
+             "kernel/sched/core.c", "drivers/char/mem.c", "MAINTAINERS"]
 
 NONE_TEMPLATE = (
     "你在一個 C 專案 repo(唯讀複本)。只能用 shell 指令(grep/awk/sed/cat/find/"
@@ -121,10 +123,10 @@ def extract_tree(tool: str) -> None:
         subprocess.run(["mv", os.path.join(wd, keep), stash], check=True)
     subprocess.run(["rm", "-rf", wd], check=True)
     os.makedirs(wd)
-    r = subprocess.run(f"git archive HEAD | tar -x -C {wd!r}",
-                       shell=True, cwd=KERNEL_GIT, capture_output=True, text=True)
+    r = subprocess.run(["tar", "-xf", KERNEL_TAR, "-C", wd],
+                       capture_output=True, text=True)
     if r.returncode != 0:
-        sys.exit(f"ERROR: git archive failed: {r.stderr}")
+        sys.exit(f"ERROR: subtree tar extract failed: {r.stderr}")
     if stash:
         assert keep is not None  # stash 只在 keep 為真時建立
         subprocess.run(["mv", stash, os.path.join(wd, keep)], check=True)
