@@ -1,5 +1,8 @@
 # R4 驗收 v4:ccodegraph token 效率改善(D16)——before/after 全量重跑與獨立完整報告
 
+> **後續**:v5 把戰場搬到 Linux kernel v6.6(索引可行性三工具全滅、8,170 檔
+> 子樹四臂對決、N=3、速度實測),見 [`llm-ab-v5-linux-kernel.md`](llm-ab-v5-linux-kernel.md)。
+
 > **TL;DR**:針對 v3 發現的「ccodegraph 是 4 個工具臂中每分正確性成本最高」問題,
 > 做了三項工具層改善(輸出顯式截斷 D16、SKILL 全面重寫、`--help` 內嵌教學),
 > 用與 v3 完全相同的條件(Sonnet 5、同 22 題、同隔離、同 harness prompt、codex

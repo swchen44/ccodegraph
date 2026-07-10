@@ -1,0 +1,122 @@
+{
+  "LKQ-001": {
+    "none": 20.9,
+    "ccodegraph": 22.2,
+    "codegraph": 21.4,
+    "cbm": 49.5
+  },
+  "LKQ-006": {
+    "none": 35.7,
+    "ccodegraph": 40.0,
+    "codegraph": 40.5,
+    "cbm": 50.8
+  },
+  "LKQ-011": {
+    "none": 33.2,
+    "ccodegraph": 28.6,
+    "codegraph": 46.3,
+    "cbm": 91.1
+  },
+  "LKQ-014": {
+    "none": 48.8,
+    "ccodegraph": 76.5,
+    "codegraph": 60.1,
+    "cbm": 97.6
+  },
+  "LKQ-017": {
+    "none": 156.4,
+    "ccodegraph": 128.3,
+    "codegraph": 110.1,
+    "cbm": 127.3
+  },
+  "LKQ-022": {
+    "none": 29.0,
+    "ccodegraph": 29.6,
+    "codegraph": 28.9,
+    "cbm": 68.8
+  },
+  "LKQ-025": {
+    "none": 76.4,
+    "ccodegraph": 50.6,
+    "codegraph": 49.0,
+    "cbm": 44.9
+  },
+  "LKQ-027": {
+    "none": 44.9,
+    "ccodegraph": 45.4,
+    "codegraph": 73.2,
+    "cbm": 40.5
+  },
+  "LKQ-033": {
+    "none": 23.7,
+    "ccodegraph": 23.5,
+    "codegraph": 29.6,
+    "cbm": 35.7
+  },
+  "LKQ-035": {
+    "none": 28.0,
+    "ccodegraph": 31.0,
+    "codegraph": 27.3,
+    "cbm": 28.5
+  },
+  "LKQ-043": {
+    "none": 48.6,
+    "ccodegraph": 60.2,
+    "codegraph": 61.2,
+    "cbm": 76.2
+  },
+  "LKQ-046": {
+    "none": 22.8,
+    "ccodegraph": 26.1,
+    "codegraph": 25.2,
+    "cbm": 37.6
+  },
+  "LKQ-049": {
+    "none": 60.3,
+    "ccodegraph": 79.2,
+    "codegraph": 105.1,
+    "cbm": 80.7
+  },
+  "LKQ-053": {
+    "none": 46.4,
+    "ccodegraph": 49.5,
+    "codegraph": 58.7,
+    "cbm": 46.1
+  },
+  "LKQ-057": {
+    "none": 26.6,
+    "ccodegraph": 41.8,
+    "codegraph": 38.3,
+    "cbm": 70.9
+  },
+  "LKQ-060": {
+    "none": 30.9,
+    "ccodegraph": 29.6,
+    "codegraph": 37.5,
+    "cbm": 29.7
+  },
+  "LKQ-066": {
+    "none": 38.9,
+    "ccodegraph": 38.8,
+    "codegraph": 47.4,
+    "cbm": 57.5
+  },
+  "LKQ-069": {
+    "none": 107.0,
+    "ccodegraph": 129.3,
+    "codegraph": 118.8,
+    "cbm": 99.7
+  },
+  "LKQ-073": {
+    "none": 50.1,
+    "ccodegraph": 51.4,
+    "codegraph": 49.6,
+    "cbm": 44.7
+  },
+  "LKQ-077": {
+    "none": 24.8,
+    "ccodegraph": 36.3,
+    "codegraph": 44.2,
+    "cbm": 47.0
+  }
+}

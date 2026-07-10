@@ -1,0 +1,1 @@
+KILLED BY USER DECISION at 14h30m (867min); policy 4h-cap DNF already recorded at 240min; progress at kill: lowercase 'ad*' symbols (~35-40% of symbol space est.); partial graph.db.building 2.3GB; cscope.out 952MB (index build phase itself completed at ~40min)

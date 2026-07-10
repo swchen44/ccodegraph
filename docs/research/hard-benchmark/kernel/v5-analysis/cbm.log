@@ -1,0 +1,42 @@
+WALL=647.0s rc=1
+STDOUT tail: 
+TIME/RSS: 683
+level=info msg=parallel.extract.progress done=27890 total=76683
+level=info msg=parallel.extract.progress done=27910 total=76683
+level=info msg=parallel.extract.progress done=27920 total=76683
+level=info msg=parallel.extract.progress done=27940 total=76683
+level=info msg=parallel.extract.progress done=27950 total=76683
+level=info msg=parallel.extract.progress done=27930 total=76683
+level=info msg=parallel.extract.progress done=27960 total=76683
+level=info msg=parallel.extract.progress done=27970 total=76683
+level=info msg=parallel.extract.progress done=27980 total=76683
+level=info msg=parallel.extract.progress done=27990 total=76683
+level=info msg=parallel.extract.progress done=28000 total=76683
+level=info msg=parallel.extract.progress done=28010 total=76683
+level=info msg=parallel.extract.progress done=28030 total=76683
+level=info msg=parallel.extract.progress done=28020 total=76683
+level=info msg=parallel.extract.progress done=28040 total=76683
+level=info msg=parallel.extract.progress done=28050 total=76683
+level=info msg=parallel.extract.progress done=28060 total=76683
+level=info msg=parallel.extract.progress done=28070 total=76683
+time: command terminated abnormally
+      647.16 real       823.94 user        95.91 sys
+           862126080  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+             9711799  page reclaims
+                5404  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+              384610  voluntary context switches
+             7220899  involuntary context switches
+       5877149955931  instructions retired
+       2159626985594  cycles elapsed
+         26313463616  peak memory footprint
+time: signal: Invalid argument
+

@@ -1,0 +1,3 @@
+done: /Users/swchen.tw/kernel-bench/work-ccodegraph/.ccodegraph/graph.db  (426544 nodes; edges: callback=3994, calls=135471, expands=128712, fnptr=5518, includes=39605, reads=20253, writes=3414; 11715s)
+    11717.95 real     20673.73 user     58577.88 sys
+           511655936  maximum resident set size
