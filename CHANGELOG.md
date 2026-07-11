@@ -9,6 +9,8 @@ Pre-1.0 caveat (SemVer §4): anything MAY change at any time; the public API
 
 ## [Unreleased]
 
+## [0.0.6] - 2026-07-11
+
 ### Changed
 
 - **D17 crossref direct read** (`parse_cscope_crossref`): the cscope database
