@@ -66,7 +66,7 @@ Schema 定義必須自足、完整、不讓大模型困擾——LLM 只看 schem
 | ID | 需求 |
 |----|------|
 | NFR1 | Python 標準庫 only;外部只依賴既有 binary(ctags/cscope;L2+ tree-sitter/clangd);缺工具明講跳過 |
-| NFR2 | **輕量、快**:no-build 基礎層中型 repo(600–800 檔)分鐘級內;C++ 檔案照收不深究 |
+| NFR2 | **輕量、快**:no-build 基礎層中型 repo(~800 檔)**秒級**、kernel 子樹(7.6k 檔)<30s、kernel 全樹(57k 檔)~1h、峰值 RSS 不破 4GB(D17 實測門檻,退步即回歸);C++ 檔案照收不深究 |
 | NFR3 | **ctags 跨平台相容**(R2):macOS BSD / Linux Exuberant / Windows 差異——啟動偵測 flavor、參數對映、非 Universal 大聲死 + 安裝指引;CI 三平台 |
 | NFR4 | 三層測試(unit/integration/e2e,標準庫 unittest);commit 時全綠;fixture 案例對應每條消歧規則 |
 | NFR5 | git 記錄每一次修改;決策(含取捨原因)記入 design.md 決策記錄——**交接資產** |
@@ -76,6 +76,8 @@ Schema 定義必須自足、完整、不讓大模型困擾——LLM 只看 schem
 
 - **R6 Rust 移植**:傳聞 10× 速度;等 Python 版功能完整、schema 穩定後評估——
   schema 是合約,引擎換語言不換合約,所以現在不用為它做任何妥協。
+  (D17 後動機重估:索引瓶頸已由演算法解決——crossref 直讀 521×,
+  kernel 子樹 22.5s——Rust 剩餘收益主要在全樹 62min 的 SQLite 寫入段。)
 - **R7 clink 研究**(https://github.com/Smattr/clink):cscope 的現代重實作
   (libclang 解析 + SQLite 儲存 + 吃 compile_commands.json)。clone 實跑、
   萃取它對 cscope 的改良;評估當第四個填料 origin(尤其 compile-DB-aware 路線)。
@@ -88,4 +90,7 @@ Schema 定義必須自足、完整、不讓大模型困擾——LLM 只看 schem
 - **Precision suite**:12 場景誤報防線 pin 成測試;ambiguous/callback 誤報抽查
 - **Portability suite**(R2 之後):三平台 ctags flavor;Windows 路徑
 - **Failure-mode suite**:工具缺失/壞輸出時的退化行為(見 design 退化矩陣)
-- 增量(L5):改 1 檔 <5s,normalized 圖 diff = 0
+- **Scale suite**(D17 之後):wpa/redis 邊集零回歸(消失邊須通過幻影判定);
+  kernel 子樹 <30min(實測 22.5s);crossref 直讀失敗須大聲降級為逐符號查詢
+- 增量(L5):改 1 檔 <5s,normalized 圖 diff = 0(端點含 kind——
+  dual-kind 撞名教訓,見 design.md kept-edge 修復)

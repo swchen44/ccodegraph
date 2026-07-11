@@ -15,7 +15,7 @@
 
 ```bash
 # 依賴:python3(標準庫)、universal-ctags、cscope;選配:clink、git
-./ccodegraph.py build -p <repo>              # step 1:建圖(零 build,~90s / 600 檔)
+./ccodegraph.py build -p <repo>              # step 1:建圖(零 build,~3s / 600 檔;kernel 子樹 7.6k 檔 ~22s)
 ./ccodegraph.py clink-import -p <repo>       # step 2(選配):語意層
 ./ccodegraph.py explore some_function -p <repo>   # 開始問!
 ```
@@ -124,8 +124,23 @@ SKILL 核心是**風險判讀章**:每級 confidence「怎麼錯」、`semantic:
 |---|---|
 | 呼叫邊召回(cflow 28 邊 GT) | **28/28**(cscope 單獨 26) |
 | fnptr 分派 / callback | 5/5 / 3/3 |
-| 建圖 / 增量 / 無變更 | 90s / **3.9s** / 3.8s(增量與全量 normalized diff = 0) |
+| 建圖 / 增量 / 無變更 | **3.4s**(D17 前 90s)/ 3.9s / 3.8s(增量與全量 normalized diff = 0,端點含 kind) |
 | 真 LLM A/B(codex,5 任務) | token 打平;**正確性 5/5 vs 3/5**(grep 臂兩題靜默答錯) |
+
+### 規模實測(D17 crossref 直讀之後,2026-07-11;`/usr/bin/time -l`)
+
+| repo | 檔數 | 建圖 | 圖規模 |
+|---|---|---|---|
+| wpa_supplicant | 620 | 3.4s | 14.4k 節點 / 113k 邊 |
+| redis(含 deps/) | 784 | 4.1s | 20.1k 節點 / 146k 邊 |
+| Linux kernel 子樹 | 7,627 | **22.5s**(N=3 中位數;D17 前 3h15m = **521×**) | 427k 節點 / 339k 邊 |
+| Linux kernel 全樹 | 56,939 | **62min**(D17 前 14.5h 未完殺掉,外推 30-40h) | 6.2M 節點 / 54.9M 邊 / 16GB |
+
+D17 = 直接解析 cscope.out(單遍取代逐符號查詢),順帶修掉 cscope 自身
+`-L` 查詢引擎的三類幻影 bug——工程記錄見 `docs/design.md` §8.5.6,bug
+證據見 `docs/research/cscope-query-engine-bugs.md`,kernel 四工具對決見
+`docs/research/llm-ab-v5-linux-kernel.md`(§4.1 為 D17 後追記)。全樹的
+開放問題:同名歧義掛靠(D3)在 57k 檔規模讓邊數爆炸(reads 一項 28.3M)。
 
 ---
 
@@ -134,10 +149,10 @@ SKILL 核心是**風險判讀章**:每級 confidence「怎麼錯」、`semantic:
 ## 必讀知識檔(依序)
 
 1. [docs/requirement.md](docs/requirement.md) — **Why(W1–W7)與 What**:每條取捨的原因,交接第一份
-2. [docs/design.md](docs/design.md) — **How**:Schema Contract(§1.5,合法值全列)、決策記錄 **D1–D14**(含被推翻的與為什麼)、roadmap
+2. [docs/design.md](docs/design.md) — **How**:Schema Contract(§1.5,合法值全列)、決策記錄 **D1–D17**(含被推翻的與為什麼)、roadmap
 3. [docs/traceability.md](docs/traceability.md) — 每條 FR/NFR 對到哪個測試
 4. [docs/reviews/](docs/reviews/) — 三輪 codex 紅隊審查與處置(NFR6 制度)
-5. [docs/research/](docs/research/) — clink 解剖、token spike、真 LLM A/B、合成 DB A/B
+5. [docs/research/](docs/research/) — clink 解剖、token spike、LLM A/B benchmark 五輪(v1 先導 → v5 Linux kernel)、cscope 查詢引擎 bug 證據(D17)
 
 ## 開發 SOP(血淚換來的規則,違反必踩)
 

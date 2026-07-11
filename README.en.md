@@ -16,7 +16,7 @@ is labelled, never deleted.**
 
 ```bash
 # deps: python3 (stdlib only), universal-ctags, cscope; optional: clink, git
-./ccodegraph.py build -p <repo>              # step 1: build the graph (no build system needed, ~90s / 600 files)
+./ccodegraph.py build -p <repo>              # step 1: build the graph (no build system needed, ~3s / 600 files; 7.6k-file kernel subtree ~22s)
 ./ccodegraph.py clink-import -p <repo>       # step 2 (optional): semantic layer
 ./ccodegraph.py explore some_function -p <repo>   # start asking!
 ```
@@ -130,8 +130,25 @@ candidates, STALE handling.
 |---|---|
 | Call-edge recall (28-edge cflow GT) | **28/28** (cscope alone 26) |
 | fnptr dispatch / callback | 5/5 / 3/3 |
-| build / incremental / no-op | 90 s / **3.9 s** / 3.8 s (incremental == full, normalized diff = 0) |
+| build / incremental / no-op | **3.4 s** (90 s pre-D17) / 3.9 s / 3.8 s (incremental == full, normalized diff = 0, endpoint kinds included) |
 | Real-LLM A/B (codex, 5 tasks) | tokens roughly even; **correctness 5/5 vs 3/5** (grep arm silently wrong twice) |
+
+### Measured at scale (after the D17 crossref direct read, 2026-07-11; `/usr/bin/time -l`)
+
+| repo | files | build | graph size |
+|---|---|---|---|
+| wpa_supplicant | 620 | 3.4 s | 14.4k nodes / 113k edges |
+| redis (deps/ included) | 784 | 4.1 s | 20.1k nodes / 146k edges |
+| Linux kernel subtree | 7,627 | **22.5 s** (median of 3; 3h15m pre-D17 = **521×**) | 427k nodes / 339k edges |
+| Linux kernel full tree | 56,939 | **62 min** (pre-D17: killed unfinished at 14.5 h, 30-40 h extrapolated) | 6.2M nodes / 54.9M edges / 16 GB |
+
+D17 = parse cscope.out directly (one pass replaces per-symbol queries); it
+also fixed three classes of phantom bugs in cscope's own `-L` query engine —
+engineering record in `docs/design.md` §8.5.6, bug evidence in
+`docs/research/cscope-query-engine-bugs.md`, the four-tool kernel shootout in
+`docs/research/llm-ab-v5-linux-kernel.md` (§4.1 is the post-D17 addendum).
+Open problem at full-tree scale: same-name ambiguous attachment (D3) explodes
+edge counts at 57k files (reads alone: 28.3M).
 
 ---
 
@@ -140,10 +157,10 @@ candidates, STALE handling.
 ## Required reading (in order)
 
 1. [docs/requirement.md](docs/requirement.md) — **Why (W1–W7) and What**: the rationale behind every trade-off; first file for handover
-2. [docs/design.md](docs/design.md) — **How**: Schema Contract (§1.5, every legal value enumerated), decision records **D1–D14** (including overturned ones and why), roadmap
+2. [docs/design.md](docs/design.md) — **How**: Schema Contract (§1.5, every legal value enumerated), decision records **D1–D17** (including overturned ones and why), roadmap
 3. [docs/traceability.md](docs/traceability.md) — every FR/NFR mapped to its verification
 4. [docs/reviews/](docs/reviews/) — three codex red-team rounds and their dispositions (NFR6)
-5. [docs/research/](docs/research/) — clink anatomy, token spike, real-LLM A/B, synthesized-DB A/B
+5. [docs/research/](docs/research/) — clink anatomy, token spike, five rounds of LLM A/B benchmarks (v1 pilot → v5 Linux kernel), cscope query-engine bug evidence (D17)
 
 ## Development SOP (rules paid for in blood)
 

@@ -9,6 +9,34 @@ Pre-1.0 caveat (SemVer §4): anything MAY change at any time; the public API
 
 ## [Unreleased]
 
+### Changed
+
+- **D17 crossref direct read** (`parse_cscope_crossref`): the cscope database
+  is now built with `-c` (uncompressed) and parsed in a single streaming pass
+  (64MB chunks), replacing ~one `cscope -dL<q>` subprocess per symbol. Build
+  times: wpa 90s → 3.4s, redis 132s → 4.1s, Linux-kernel subtree (7,627
+  files) 3h15m → **22.5s (521×)**, full kernel (56,939 files) DNF → **62min**
+  (peak RSS 3.9GB). The Day-1 line-mode resident worker pool (`CscopeWorker`)
+  remains as the loud fallback when the crossref header is not `cscope 15 -c`.
+  Scope semantics were reverse-engineered from cscope 15.9 with a
+  differential tester; graph parity verified edge-by-edge on wpa/redis
+  (nodes byte-identical; every removed edge machine-verified as a phantom).
+
+### Fixed
+
+- Phantoms from cscope's own `-L` query engine no longer enter the graph
+  (three bug classes on large files: line-number drift, duplicated callers
+  on multi-line definitions, dropped result rows — evidence in
+  `docs/research/cscope-query-engine-bugs.md`). Net effect on wpa/redis:
+  +2,397/+5,139 recovered true edges.
+- Incremental kept-edge rewiring now keys node ids by `(qname, kind)`.
+  Names existing as both a function and a macro (`wpa_printf`) previously
+  had their function-dst edges silently rewired onto macro nodes on every
+  incremental build (pre-existing since the kept-edge mechanism; wpa
+  reproduction: +9,414 polluted call edges from touching one file). The
+  normalized-snapshot test now compares endpoint kinds, plus a dedicated
+  dual-kind fixture test.
+
 ## [0.0.5] - 2026-07-08
 
 ### Added

@@ -12,7 +12,7 @@
 | FR8 查詢層 for LLM | SKILL 觸發實測(codex 第三輪 10 題)+ 真 LLM A/B | docs/reviews/…round3 + docs/research/llm-ab.md |
 | FR9 --json 雙軌 | JSON 欄位與文字一致斷言 | test_json_*(e2e) |
 | NFR1 標準庫 only | import 面檢查(人工)+ 退化訊息測試 | —(靠 code review;無自動閘,已知) |
-| NFR2 輕量快 | wpa 90s/3.9s 實測 | design §9 數字 |
+| NFR2 輕量快 | wpa 3.4s/3.9s、kernel 子樹 22.5s、全樹 62min/RSS 3.9GB(D17 實測) | design §8.5.6 + research/llm-ab-v5 §4.1 |
 | NFR3 ctags 相容 | flavor 分類 4 案 + CI 三平台 | TestClassifyCtags + ci.yml |
 | NFR4 三層測試 | 115+ tests,commit 全綠 | git log 慣例 |
 | NFR5 決策記錄 | D1–D13 + 三輪 review 歸檔 | design.md §8.x、docs/reviews/ |
