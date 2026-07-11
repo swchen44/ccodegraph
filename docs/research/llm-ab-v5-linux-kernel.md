@@ -262,22 +262,104 @@ v5 收尾後對「下一步」做了一輪刻意的多視角對抗辯論(反駁/
 
 ### 12.1 立即行動:D17 spike(timebox 兩天,驗收數字寫死)
 
-**目標**:消滅 §2 定位的頭號規模瓶頸——逐符號 `cscope -dL3` subprocess
-呼叫(kernel 級 ~50 萬次 spawn × 952MB 索引掃描 = 3h15m/子樹、外推
-30-40h/全樹)。
+**目標**:消滅 §2 定位的頭號規模瓶頸——逐符號 cscope subprocess 呼叫
+(子樹 44MB 索引 × ~40 萬次 spawn = 3h15m;全樹 952MB 索引、查詢數再
+放大數倍,外推 30-40h)。
 
-- **Day 1**:改 `cscope_lines()` 為 **cscope line-mode 常駐行程池**
-  (`cscope -dl`,索引載入一次,stdin/stdout 餵查詢取代 per-symbol
-  spawn)。驗收標準:①wpa/redis regression fixture **邊數零回歸**
-  (測試現成);②kernel 子樹重建 **< 30 分鐘**(現 3h15m,≥6.5×)。
-  達標即記 D17、commit。
-- **Day 2(條件觸發)**:Day 1 未達標 → 改試**直接解析 `cscope.out`**
-  (952MB 交叉索引 40 分鐘就建好了,答案全在裡面;一次線性掃描取代
-  50 萬次查詢,格式半公開)。同樣 timebox 一天。
-- **兩個 spike 都失敗** → 誠實記錄「cscope 架構到頂」,凍結 L1 引擎
-  投入,不再加碼。
-- **Day 3**:只重跑索引計時(子樹 + 全 kernel 各一次)更新 §4 表格;
-  **QA 不重跑**(+1/60 的分數結論不會因索引變快而改變)。
+#### Day 1:cscope line-mode 常駐行程池
+
+**修改原因(三個實測證據,均出自 §4 的 `time -l` log)**:
+
+1. **查詢次數**:L1 對每個符號名開一個 cscope 行程
+   (`cscope_lines()` 內的 `subprocess.run`)。子樹有 46,511 個函式名
+   + 4,436 個全域變數(×2 種查詢)+ 十萬級的巨集名(36 萬個 macro
+   define 去重後)+ 數千個 header,合計 **~40 萬次 fork/exec**。
+2. **每次都重新掃全庫**:建庫用 `-bkRu`、無倒排索引,每個行程都要
+   重新開啟並線性掃描 44MB 的 `cscope.out`,查完即退出,下一個符號
+   從零再來。
+3. **時間帳的煙槍證據**:子樹索引 user 20,674s、**sys 58,578s**
+   (系統時間是使用者時間的 2.8 倍),外加 1.9 億次 page reclaim、
+   1 億次 involuntary context switch——機器大部分時間花在 fork/exec
+   與重複讀同一檔案的核心態工作,不是符號搜尋本身。
+
+**怎麼改**:cscope 有為編輯器整合設計的 line-oriented 模式
+(`cscope -d -l -f cscope.out`,vim/emacs 用了幾十年):行程**常駐**、
+庫只載入一次,stdin 送 `3symbol\n`(數字同 `-L` 的查詢類型),stdout
+回 `cscope: N lines` 標頭 + N 行結果——**輸出格式與 `-L` 一字不差,
+parser 零改動**,只換傳輸層。改動全部收在 `cscope_lines()` 內部,
+函式簽名不變,build() 的 5 個呼叫點零改動:
+
+1. 新增 `CscopeWorker` 類:包一個 `Popen(..., stdin=PIPE, stdout=PIPE)`
+   常駐行程,`query(qflag, sym)` 寫入查詢、讀標頭取 N、讀 N 行,
+   沿用現有 4 欄位切法。
+2. 每執行緒一個 worker(`threading.local()`,首次呼叫才 spawn):
+   現行 `ThreadPoolExecutor(max_workers=jobs)` fan-out 結構完全保留,
+   8 workers → 從 ~40 萬個行程變成 **8 個常駐行程**,並行度不變
+   (今天本來就是 8 個 cscope 同時讀同一唯讀庫,無新增併發風險)。
+3. **D15 語意保留(最容易做錯的地方)**:line-mode 下毒符號可能讓
+   常駐行程整個死掉(單發模式只是 rc≠0)。`query()` 須偵測 EOF/行程
+   亡故 → 該符號記入 `CSCOPE_SKIPPED`、**重生 worker**(代價只是重開
+   一次庫)、繼續下一個符號。子樹實測有 3 個這種符號
+   (`DECLARE_IDTENTRY_SYSVEC` 等),它們必須依然是「被跳過」而不是
+   「弄死整個 build」。
+4. 已知協定坑:提示符 `>> ` 無換行,會黏在下一個標頭前面變成
+   `>> cscope: N lines`——標頭 regex 要寫 `(?:>> )?cscope: (\d+) lines`
+   (vim/emacs 整合碼裡的經典處理)。
+5. 收尾:executor 結束時對每個 worker 送 `q\n` 並 terminate。
+
+**為什麼不是別的修法**:批次查詢——cscope 的 `-L` 一次只吃一個
+pattern,沒有多符號批次模式,line-mode 就是它官方的批次答案;只加
+`-q` 倒排索引——能降單次掃描成本,但 40 萬次 fork/exec + 開庫照付,
+sys≫user 的時間帳說明行程開銷才是大頭,單靠 `-q` 不夠(可於 Day 1
+達標後疊加再量,但不混入 Day 1,避免變因污染)。
+
+**驗收(達標即記 D17、commit)**:①wpa/redis regression fixture
+**邊數零回歸**——傳輸層換掉而 parser 不動,任何邊數變化都代表協定
+處理有 bug(標頭解析/提示符黏連/worker 重生漏資料),fixture 是最
+靈敏的偵測器;②kernel 子樹重建 **< 30 分鐘**(現 3h15m,≥6.5×)——
+1,800s × 8 workers = 14,400 核心秒 ÷ ~40 萬次查詢 ≈ 36ms/查詢,對
+庫已在記憶體的常駐 cscope 是合理目標;達不到即說明常駐化不足以救
+L1,直接觸發 Day 2。
+
+#### Day 2(條件觸發):直接解析 cscope.out
+
+**觸發條件**:Day 1 未達標。同樣 timebox 一天。
+
+**為什麼可行**:答案早就全在檔案裡——cscope.out 是 cscope 自己
+40 分鐘建好(全樹)的交叉索引,`-L` 查詢只是對它的檢索介面。格式
+半公開(version 15,約 20 年未變;結構見 cscope 原始碼
+`scanner.h`/`crossref.c`):以 `\t@<file>` 分檔區塊,行號記錄內以
+單字元標記語意(`$` 函式定義、`` ` `` 呼叫、`#` define、`~` include、
+`=` 賦值⋯)。**一次線性掃描**即可同時取得「所有符號」的答案:走檔
+區塊時追蹤當前所在函式(`$` 進、`}` 出),遇呼叫標記就記
+(caller, file, line) 進 name→occurrences 映射——把 O(符號數 × 庫大小)
+變成 **O(庫大小)**,44MB 掃一遍是秒級。
+
+**怎麼改**:寫單遍 parser 產出四張映射(callers/refs/assignments/
+includers),`build()` 的邊生成邏輯(歸戶、choose_dst、RMW 補償、
+重名 header 防錯連)**原封不動**,只把資料來源從逐符號查詢換成查表。
+壓縮問題:cscope 預設對庫做 dicode 壓縮,建庫加 `-c` 改存未壓縮
+ASCII 可讓解析大幅簡化(庫變大是可接受的代價,先量再說)。
+
+**風險(也是它排在 Day 2 而非 Day 1 的原因)**:格式無正式規格、
+版本相依;`<global>`/`<unknown>` 歸戶等語意細節須與 cscope 行為
+逐項對齊——邊數零回歸的 fixture 同樣是驗收門檻。**兩個 spike 都
+失敗** → 誠實記錄「cscope 架構到頂」,凍結 L1 引擎投入,不再加碼。
+
+#### Day 3:只重跑索引計時,QA 不重跑
+
+**做什麼**:沿用 §3 的計時方法(`/usr/bin/time -l`、同一台機器、
+tar 重解樹)重測索引——子樹 ×3 取中位數(預期 <10min 適用 N=3
+規則)、全 kernel ×1;§4 表格加「D17 後」欄,新舊數字並列。同時
+記錄子樹邊數對照(calls=135,471、expands=128,712 等 7 類)作為
+kernel 規模的圖同一性證據——fixture 證明 wpa/redis 零回歸,邊數
+對照證明大規模下也沒漏。
+
+**為什麼 QA 不重跑**:D17 只動建圖的傳輸層,查詢路徑
+(`q_sectioned`/`q_explore`/SQL)一行不動;邊數零回歸是驗收門檻,
+圖內容相同 ⇒ agent 看到的回覆逐位元相同 ⇒ 分數不可能變。重跑
+20 題 × 4 臂 × 3 reps 要再花 1-2 天與數十美元,換到的資訊量是零;
++1/60 的 QA 結論(§7)不因索引變快而改變。
 
 **冰箱清單**(明文凍結,解凍條件 = D17 有結果 **且** 12.2 的使用者
 問題有答案):Rust 重寫(R6)、新邊類型(struct-literal/#ifdef 函式
