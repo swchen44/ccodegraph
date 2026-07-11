@@ -452,6 +452,17 @@ nodes/includes/callback/fnptr 與 v5 完全一致,calls/expands/reads/writes
 (header 非 cscope 15 -c 時大聲警告)沿用行程池,任何協定失敗重生 worker
 重試一次再跳過。`CSCOPE_SKIPPED` 機制不變。
 
+**Day 3 官方計時(串流化後;v5 報告 §4.1 同步)**:parser 改 64MB
+chunk+carry 串流(全 kernel -c crossref 1.08GB,整檔 split 會爆 8GB 機器;
+wpa/redis 重建 dump 逐位元等價證明)。子樹 fresh build ×3:22.49 / 21.77 /
+278.50s(離群值為外部 I/O 干擾,user+sys 三次皆 ~47s)→ **中位數 22.5s,
+521×**。**全 kernel(56,939 檔)首次完成:61m55s、rc=0**,峰值 RSS 3.9GB
+(v5:14.5h 人為終止、外推 30-40h)——6.18M 節點、54.8M 邊、graph.db
+16GB;`cscope -bckR` 本身僅 ~1 分鐘。暴露下一個規模瓶頸:**D3 同名歧義
+掛靠的邊爆炸**(reads 28.3M、expands 10.6M;子樹→全樹檔數 7.5× 邊數
+163×)——圖建得出來,訊噪比與體積成為新的開放問題(依 v5 §12.2 凍結令,
+留待真實使用者反饋決定是否處理)。
+
 ## 8.6 第二輪紅隊(文件盲區)處置(2026-07-05)
 
 報告:[reviews/2026-07-05-codex-docs-round2.md](reviews/2026-07-05-codex-docs-round2.md)。

@@ -1,0 +1,26 @@
+[L0] cscope index + ctags 節點 …
+     676754 functions, 224945 globals, 5220647 macros, 56939 files
+[L1] cscope 邊:calls x619958 + reads/writes x163987 + includes(crossref 直讀)…
+[L3] callback + fnptr 啟發式 + manual 表 …
+     callback=681665, fnptr=108273, manual: registrations=0, links=0
+[L5] co_changes skipped — not a git repo(或 git 不可用)
+done: /Users/swchen.tw/kernel-bench/d17-day1/kernel-full/.ccodegraph/graph.db  (6179285 nodes; edges: callback=671903, calls=5749036, expands=10583881, fnptr=108252, includes=1174875, reads=28268223, writes=8294014; 3677s)
+note: 語意層跑 `clink-import`(選配)可疊加 semantic 註記。
+     3714.58 real       620.37 user      1565.94 sys
+          3914252288  maximum resident set size
+                   0  average shared memory size
+                   0  average unshared data size
+                   0  average unshared stack size
+            68532248  page reclaims
+                1840  page faults
+                   0  swaps
+                   0  block input operations
+                   0  block output operations
+                   0  messages sent
+                   0  messages received
+                   0  signals received
+            10573543  voluntary context switches
+             3260086  involuntary context switches
+      12426479794313  instructions retired
+       6402762364577  cycles elapsed
+          9724334400  peak memory footprint
