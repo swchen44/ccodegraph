@@ -375,33 +375,52 @@ class TestToolPath(unittest.TestCase):
 
 
 class TestCscopeLinesLenient(unittest.TestCase):
-    """D15:cscope 對單一符號的內部錯誤(實測:redis vendored jemalloc 的巨集
-    CTL 被密集使用時觸發 'Internal error: cannot get source line from
-    database',單執行緒 100% 重現,非併發競態)不得讓整個 build 中止——
-    跳過該符號、計入 CSCOPE_SKIPPED,其餘符號正常處理。"""
+    """D15 語意在 D17 常駐行程池下守恆:單一符號的失敗(舊:單發 rc!=0;
+    新:worker 協定失敗,如 jemalloc 巨集觸發的 'Internal error: cannot
+    get source line from database')不得讓整個 build 中止——重試一次後
+    跳過該符號、計入 CSCOPE_SKIPPED,其餘符號正常。真 cscope 的協定
+    細節測試見 tests/unit/test_cscope_worker.py。"""
 
     def setUp(self):
         ig.CSCOPE_SKIPPED.clear()
+        ig._CSCOPE_TL.worker = None
 
-    def test_nonzero_rc_returns_empty_and_records_skip(self):
-        import subprocess as sp
+    def tearDown(self):
+        ig._close_cscope_workers()
+        ig._CSCOPE_TL.worker = None
+
+    def test_persistent_failure_returns_empty_and_records_skip(self):
         import unittest.mock as mock
-        fake = sp.CompletedProcess(
-            args=[], returncode=1, stdout="",
-            stderr="Internal error: cannot get source line from database")
-        with mock.patch("subprocess.run", return_value=fake):
+
+        class Dead:
+            root = "/tmp"
+
+            def query(self, qflag, sym):
+                return [], ("Internal error: cannot get source line "
+                            "from database")
+
+            def close(self):
+                pass
+        with mock.patch.object(ig, "_cscope_worker",
+                               return_value=Dead()):
             rows = ig.cscope_lines("/tmp", "3", "CTL")
         self.assertEqual(rows, [])
         self.assertEqual(len(ig.CSCOPE_SKIPPED), 1)
         self.assertEqual(ig.CSCOPE_SKIPPED[0][0], "CTL")
 
     def test_success_case_unaffected(self):
-        import subprocess as sp
         import unittest.mock as mock
-        fake = sp.CompletedProcess(
-            args=[], returncode=0,
-            stdout="a.c foo 10 foo();\n", stderr="")
-        with mock.patch("subprocess.run", return_value=fake):
+
+        class Ok:
+            root = "/tmp"
+
+            def query(self, qflag, sym):
+                return [("foo", "a.c", 10, "foo();")], None
+
+            def close(self):
+                pass
+        with mock.patch.object(ig, "_cscope_worker",
+                               return_value=Ok()):
             rows = ig.cscope_lines("/tmp", "3", "foo")
         self.assertEqual(rows, [("foo", "a.c", 10, "foo();")])
         self.assertEqual(ig.CSCOPE_SKIPPED, [])

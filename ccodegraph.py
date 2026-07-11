@@ -20,9 +20,12 @@ import hashlib
 import json
 import os
 import re
+import select
 import sqlite3
 import subprocess
 import sys
+import tempfile
+import threading
 import time
 from typing import Any
 
@@ -474,30 +477,361 @@ def run_checked(cmd: list[str], cwd: str) -> str:
 
 CSCOPE_SKIPPED: list[tuple[str, str]] = []  # (symbol, stderr) — build() 結尾彙整警告
 
+_CSCOPE_HEADER_RE = re.compile(rb"cscope: (\d+) lines$")
+_CSCOPE_NO_RESULT = b"Unable to search database"  # line-mode 的「查無結果」回覆
+_CSCOPE_QUERY_TIMEOUT = 120.0   # 常駐查詢單次上限;實測 kernel 級單發也 <1s
+
+
+class CscopeWorker:
+    """D17:cscope line-mode(`-dl`)常駐行程,索引只載入一次。
+
+    協定(cscope 15.9 實測):啟動印 `>> ` 提示符(無換行);送
+    `<qflag><sym>\\n` 後回 `cscope: N lines` 標頭 + N 行結果(格式與
+    `-L` 一字不差),再回提示符。提示符無換行 → 會黏在下一個標頭前
+    (`>> cscope: 12 lines`),讀取時先剝掉。「查無結果」(符號不存在
+    或零匹配)回 `Unable to search database` 而非 0 lines 標頭,等價舊
+    `-L` 模式的空輸出。stdout 用 binary 無緩衝 + select,任何 timeout/
+    EOF/怪回覆都能偵測而不是永久卡死。"""
+
+    def __init__(self, root: str) -> None:
+        self.root = root
+        # 生命週期跨越整個 worker,close() 收 — 不能用 with(SIM115)
+        self.stderr_f = tempfile.TemporaryFile()  # noqa: SIM115
+        self.proc = subprocess.Popen(
+            [tool_path("cscope"), "-d", "-l", "-f", CSCOPE_DB],
+            cwd=root, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+            stderr=self.stderr_f, bufsize=0)
+        self._buf = b""
+
+    def _readline(self) -> bytes | None:
+        """讀一行(去行尾);None=timeout、b""=EOF(行程亡故)。"""
+        deadline = time.monotonic() + _CSCOPE_QUERY_TIMEOUT
+        while b"\n" not in self._buf:
+            left = deadline - time.monotonic()
+            if left <= 0:
+                return None
+            ready, _, _ = select.select([self.proc.stdout], [], [],
+                                        min(left, 5.0))
+            if not ready:
+                continue
+            assert self.proc.stdout is not None
+            chunk = os.read(self.proc.stdout.fileno(), 65536)
+            if not chunk:
+                return b""
+            self._buf += chunk
+        line, self._buf = self._buf.split(b"\n", 1)
+        return line[:-1] if line.endswith(b"\r") else line
+
+    def _stderr_tail(self) -> str:
+        try:
+            self.stderr_f.seek(0, os.SEEK_END)
+            size = self.stderr_f.tell()
+            self.stderr_f.seek(max(0, size - 300))
+            return self.stderr_f.read().decode("utf-8", "replace").strip()
+        except (OSError, ValueError):
+            return ""
+
+    def query(self, qflag: str, sym: str) -> tuple[list[CscopeRow], str | None]:
+        """回 (rows, None);任何協定失敗回 ([], 錯誤描述),此後這個
+        worker 不可信,呼叫端必須重生。"""
+        try:
+            assert self.proc.stdin is not None
+            self.proc.stdin.write(f"{qflag}{sym}\n".encode())
+            self.proc.stdin.flush()
+        except OSError as e:
+            return [], f"write failed ({e}); stderr: {self._stderr_tail()}"
+        header = self._readline()
+        if header is None:
+            return [], f"query timeout ({_CSCOPE_QUERY_TIMEOUT:.0f}s)"
+        if header == b"":
+            return [], f"worker died (EOF); stderr: {self._stderr_tail()}"
+        stripped = header.strip()
+        while stripped.startswith(b">> "):   # 提示符黏連
+            stripped = stripped[3:]
+        if stripped == _CSCOPE_NO_RESULT:
+            return [], None
+        m = _CSCOPE_HEADER_RE.match(stripped)
+        if not m:
+            return [], (f"unexpected response {header[:120]!r}; "
+                        f"stderr: {self._stderr_tail()}")
+        out: list[CscopeRow] = []
+        for _ in range(int(m.group(1))):
+            raw = self._readline()
+            if not raw:
+                return [], "worker died mid-response" if raw == b"" \
+                    else "timeout mid-response"
+            p = raw.decode("utf-8", "replace").split(None, 3)
+            if len(p) >= 3 and p[2].isdigit():
+                out.append((p[1], p[0], int(p[2]), p[3] if len(p) > 3 else ""))
+        return out, None
+
+    def close(self) -> None:
+        try:
+            if self.proc.stdin is not None:
+                self.proc.stdin.close()   # EOF → cscope 自行退出
+        except OSError:
+            pass
+        try:
+            self.proc.wait(timeout=2)
+        except subprocess.TimeoutExpired:
+            self.proc.kill()
+            self.proc.wait()
+        self.stderr_f.close()
+
+
+_CSCOPE_TL = threading.local()            # 每執行緒一個常駐 worker
+_CSCOPE_WORKERS: list[CscopeWorker] = []  # 全部 worker 的註冊表(收尾用)
+_CSCOPE_WORKERS_LOCK = threading.Lock()
+
+
+def _cscope_worker(root: str) -> CscopeWorker:
+    w = getattr(_CSCOPE_TL, "worker", None)
+    if w is None or w.root != root or w.proc.poll() is not None:
+        w = CscopeWorker(root)
+        _CSCOPE_TL.worker = w
+        with _CSCOPE_WORKERS_LOCK:
+            _CSCOPE_WORKERS.append(w)
+    return w
+
+
+def _retire_cscope_worker(w: CscopeWorker) -> None:
+    _CSCOPE_TL.worker = None
+    with _CSCOPE_WORKERS_LOCK:
+        if w in _CSCOPE_WORKERS:
+            _CSCOPE_WORKERS.remove(w)
+    w.close()
+
+
+def _close_cscope_workers() -> None:
+    with _CSCOPE_WORKERS_LOCK:
+        ws = list(_CSCOPE_WORKERS)
+        _CSCOPE_WORKERS.clear()
+    for w in ws:
+        w.close()
+
+
+class _CscopePool:
+    """with 區塊結束時(含異常路徑)關閉所有常駐 cscope worker。"""
+
+    def __enter__(self) -> None:
+        return None
+
+    def __exit__(self, *_exc: object) -> None:
+        _close_cscope_workers()
+
+
+class CrossrefError(Exception):
+    """cscope.out 直讀失敗(版本/格式不符)——呼叫端須降級逐符號查詢。"""
+
+
+_XREF_ASSIGN_RE = re.compile(
+    rb"^\s*(=(?!=)|\+=|-=|\*=|/=|%=|&=|\|=|\^=|<<=|>>=)")
+
+XrefMaps = tuple[dict[str, list[CscopeRow]], dict[str, list[CscopeRow]],
+                 dict[str, list[CscopeRow]], dict[str, list[CscopeRow]]]
+
+
+def parse_cscope_crossref(db_path: str, want_calls: set[str],
+                          want_refs: set[str]) -> XrefMaps:
+    """D17 Day2:單遍解析 cscope -c(未壓縮)crossref,一次取得「所有」
+    符號的查詢結果,取代逐符號 `cscope -dL<q>` 呼叫(kernel 級 ~40 萬次
+    x 每次線性重掃整個 crossref → 一次 O(檔案大小) 掃描)。
+
+    回 (calls, refs, assigns, includes_by_basename),各 map 的 row 形狀
+    與 -L 輸出解析結果一字不差:(scope, file, line, text)。calls 只收
+    want_calls(函式+巨集名)、refs/assigns 只收 want_refs(全域名),
+    界定記憶體上限(kernel 全部符號的 refs 是千萬級)。
+
+    格式(cscope 15,-c;逐條由 15.9 實測逆向,tests 有對拍):
+    `\\t@file` 分檔;`<lineno> text0` 起行記錄,之後符號行/文字片段
+    嚴格交錯(符號位置遇空行=記錄終止;行尾恰為符號時會有空文字片段);
+    `\\t$fn` 函式定義、`\\t#macro` 巨集定義、`\\t}`/`\\t)` 對應結束、
+    `` \\t` `` 呼叫、`\\t~"`/`\\t~<` include、字母標記=各類定義、
+    無標記=一般引用;行文字 = 片段+符號名依序串接。
+
+    scope 引擎(cscope 查詢端行為的等價重建;它自己的 -L 查詢在多行
+    定義/大檔上反而有丟行與雙報 bug,見 D17 記錄):
+    - func 由 $ 設定、} 清除;macro 由 # 設定、) 清除(巢於函式內的
+      #define 結束後恢復函式 scope);cur = macro ?? func。
+    - 發射:cur≠<global> → cur;字母定義標記 → <global>;否則同名符號
+      上次發射的 scope(黏滯 fallback;@file 清空;巨集區發射不進黏滯)。
+    - $ 先切換再發射;# 先發射再切換。
+    - -L9 等價:符號「存入 crossref 的出現位置」後方文字片段以賦值運算子
+      開頭(== 不算、++/-- 不算;每行只看第一次出現——cscope 亦然)。
+    - 同名同行去重:refs/calls 取第一個 entry,assigns 任一 entry 通過。
+    """
+    with open(db_path, "rb") as fh:
+        data = fh.read()
+    lines = data.split(b"\n")
+    header = lines[0].decode("utf-8", "replace")
+    if not header.startswith("cscope 15 ") or " -c " not in header:
+        raise CrossrefError(f"非 cscope 15 -c 格式:{header[:60]!r}")
+
+    calls: dict[str, list[CscopeRow]] = {}
+    refs: dict[str, list[CscopeRow]] = {}
+    assigns: dict[str, list[CscopeRow]] = {}
+    includes: dict[str, list[CscopeRow]] = {}   # basename(寫入路徑) → rows
+
+    cur_file = ""
+    func = "<global>"
+    shadows: list[str] = []   # 嵌套 $ 時被遮蔽的外層 func(雙發射候選)
+    macro: str | None = None
+    sticky: dict[str, str] = {}
+    i, n = 1, len(lines)
+    while i < n:
+        ln = lines[i]
+        if ln.startswith(b"\t@"):
+            fname = ln[2:]
+            if not fname:                     # trailer:解析結束
+                break
+            cur_file = fname.decode("utf-8", "replace")
+            func, shadows, macro, sticky = "<global>", [], None, {}
+            i += 1
+            continue
+        if ln[:1].isdigit():                  # 行記錄
+            sp = ln.find(b" ")
+            lineno = int(ln[:sp])
+            frags = [ln[sp + 1:]]
+            entries: list[tuple[bytes, bytes, int]] = []
+            i += 1
+            expect_sym = True
+            while i < n:
+                cur = lines[i]
+                if expect_sym:
+                    if cur == b"":            # 符號位置空行=終止
+                        break
+                    if cur.startswith(b"\t"):
+                        entries.append((cur[1:2], cur[2:], len(frags)))
+                    else:
+                        entries.append((b"", cur, len(frags)))
+                else:
+                    frags.append(cur)
+                expect_sym = not expect_sym
+                i += 1
+            i += 1                            # 吃掉終止空行
+            text: str | None = None           # 懶重建(多數行沒人要)
+            rec_seen: set[tuple[str, str, str]] = set()
+            for mark, bname, fidx in entries:
+                if mark == b")":
+                    macro = None
+                    continue
+                if mark == b"}":
+                    func = "<global>"
+                    shadows = []
+                    continue
+                if not bname:
+                    continue
+                nm = bname.decode("utf-8", "replace")
+                if mark == b"$":
+                    # 嵌套 $(前一函式沒有 } 就出現新 $)= 掃描器的假標記:
+                    # C++ 建構子初始化列表(`: wpagui(_wpagui)`)產生假內層,
+                    # 巨集生成函式的頂層呼叫(`BIT_SH(bit_rol, brol)`)產生
+                    # 假外層——哪個是真 caller 掃描層無從判定。解法:外層
+                    # 進 shadows,之後每站點對全部候選「雙發射」,交給
+                    # attribute_src 以節點存在+行區間仲裁(重現 cscope
+                    # 查詢端雙報+舊管線過濾的實際行為;wpa/redis 邊差分
+                    # 實證此路徑損失最小)。
+                    if func != "<global>" and func != nm \
+                            and func not in shadows:
+                        shadows.append(func)
+                    func = nm
+                    macro = None
+                want_inc = mark == b"~"
+                want_c = mark == b"`" and nm in want_calls
+                want_r = not want_inc and nm in want_refs
+                if not (want_inc or want_c or want_r):
+                    # 黏滯只在同名符號自己發射時被讀,無關名字不必簿記
+                    if mark == b"#":
+                        macro = nm
+                    continue
+                if text is None:
+                    parts: list[bytes] = []
+                    fi = 0
+                    for _m2, nm2, fx2 in entries:
+                        parts.extend(frags[fi:fx2])
+                        fi = fx2
+                        parts.append(nm2)
+                    parts.extend(frags[fi:])
+                    text = b"".join(parts).decode("utf-8", "replace")
+                if want_inc:
+                    base = nm[1:].rsplit("/", 1)[-1]   # nm=引號字元+路徑
+                    includes.setdefault(base, []).append(
+                        ("<global>", cur_file, lineno, text))
+                    continue
+                cur_scope = macro if macro is not None else func
+                if cur_scope != "<global>":
+                    emits = [cur_scope] + \
+                        [s for s in shadows if macro is None]
+                elif mark and mark.isalpha():
+                    emits = ["<global>"]
+                else:
+                    emits = [sticky.get(nm, "<global>")]
+                if macro is None:
+                    sticky[nm] = emits[0]
+                is_assign = (fidx < len(frags)
+                             and _XREF_ASSIGN_RE.match(frags[fidx]))
+                for emit in emits:
+                    row: CscopeRow = (emit, cur_file, lineno, text)
+                    if want_r and ("r", nm, emit) not in rec_seen:
+                        rec_seen.add(("r", nm, emit))
+                        refs.setdefault(nm, []).append(row)
+                    if want_c and ("c", nm, emit) not in rec_seen:
+                        rec_seen.add(("c", nm, emit))
+                        calls.setdefault(nm, []).append(row)
+                    if (want_r and is_assign
+                            and ("a", nm, emit) not in rec_seen):
+                        rec_seen.add(("a", nm, emit))
+                        assigns.setdefault(nm, []).append(row)
+                if mark == b"#":
+                    macro = nm
+            continue
+        if ln.startswith(b"\t"):              # 記錄外裸標記(多行 #define 的 ))
+            mark, bnm = ln[1:2], ln[2:]
+            if mark == b")":
+                macro = None
+            elif mark == b"}":
+                func = "<global>"
+                shadows = []
+            elif mark == b"$" and bnm:
+                bare_fn = bnm.decode("utf-8", "replace")
+                if func != "<global>" and func != bare_fn \
+                        and func not in shadows:
+                    shadows.append(func)
+                func = bare_fn
+                macro = None
+            elif mark == b"#" and bnm:
+                macro = bnm.decode("utf-8", "replace")
+            i += 1
+            continue
+        i += 1
+    else:
+        raise CrossrefError("crossref 無 trailer(檔案截斷?)")
+    return calls, refs, assigns, includes
+
 
 def cscope_lines(root: str, qflag: str, sym: str) -> list[CscopeRow]:
-    """cscope -d -f <專用索引> -L<q> sym → [(field2, file, line, text)]。
+    """cscope 查詢 sym → [(field2, file, line, text)],走常駐行程池。
 
-    D15(2026-07-06,真實 redis 建圖時發現):cscope 對單一符號在同檔被
-    極端密集使用時(實測:jemalloc `deps/` 內巨集 CTL 被呼叫數百次)會回報
-    "Internal error: cannot get source line from database"(rc!=0)——單執行緒
-    重跑也 100% 重現,不是併發競態。這是 cscope 自身的已知限制,不是我們的
-    查詢語法錯誤。單一符號失敗不該讓上萬次查詢的整個 build 陣亡(P7 精神:
-    寧可漏這一條邊,不要整張圖都沒了)——warn + 跳過該符號,計入
-    CSCOPE_SKIPPED,build() 結尾印出彙總筆數與清單。"""
-    out: list[CscopeRow] = []
-    r = subprocess.run(
-        [tool_path("cscope"), "-d", "-f", CSCOPE_DB, "-L" + qflag, sym],
-        cwd=root, capture_output=True, text=True)
-    if r.returncode != 0:
-        CSCOPE_SKIPPED.append((sym, r.stderr.strip()[:200]))
-        return out
-    raw_out = r.stdout
-    for raw in raw_out.splitlines():
-        p = raw.split(None, 3)
-        if len(p) >= 3 and p[2].isdigit():
-            out.append((p[1], p[0], int(p[2]), p[3] if len(p) > 3 else ""))
-    return out
+    D17(2026-07-11,v5 kernel 子樹索引 3h15m 後拍板):原本每符號
+    spawn 一個 `cscope -dL<q>` 行程——kernel 級 ~40 萬次 fork/exec、
+    每次重掃 44MB 索引,sys 時間(58,578s)是 user(20,674s)的 2.8 倍,
+    行程開銷才是大頭。改為每執行緒一個 line-mode 常駐行程(索引載入
+    一次),輸出格式與 -L 相同,parser 不變,只換傳輸層。
+
+    D15 語意保留(2026-07-06,redis/jemalloc 巨集內部錯誤):單一符號
+    失敗不該讓整個 build 陣亡。任何協定失敗先重生 worker 重試一次
+    (保護「前一個符號毒死行程、這個符號無辜」;毒符號 100% 重現,
+    重試必然再失敗),再失敗才記入 CSCOPE_SKIPPED 跳過該符號。"""
+    err = ""
+    for _attempt in (1, 2):
+        w = _cscope_worker(root)
+        rows, qerr = w.query(qflag, sym)
+        if qerr is None:
+            return rows
+        err = qerr
+        _retire_cscope_worker(w)
+    CSCOPE_SKIPPED.append((sym, err[:200]))
+    return []
 
 
 def ctags_defs(root: str) -> list[Def]:
@@ -779,8 +1113,13 @@ def build(root: str, db_path: str, jobs: int,
 
     mm_rules = load_module_map(module_map) if module_map else []
     print("[L0] cscope index + ctags 節點 …")
-    cscope_flags = "-bkRu" if (incremental and (touched or deleted)) \
-        else "-bkR"   # -u:增量時無條件重建(cscope 吃 mtime 秒級精度,快改看不見)
+    # D17 註:實驗過 -q 倒排索引(單查詢 9.5ms→0.15ms),但 cscope 的
+    # 倒排路徑與線性掃描路徑回「不同的結果集」——wpa 實測丟 534 calls +
+    # 1000 includes 真邊(也多撿 2224 真邊,雙向皆真)。零回歸紅線斃掉。
+    # -c:存未壓縮 crossref 供 parse_cscope_crossref 直讀(D17 Day2);
+    # 只影響編碼不影響內容,cscope 自身查詢兩種都吃(降級路徑不受影響)。
+    cscope_flags = "-bckRu" if (incremental and (touched or deleted)) \
+        else "-bckR"  # -u:增量時無條件重建(cscope 吃 mtime 秒級精度,快改看不見)
     run_checked([tool_path("cscope"), cscope_flags, "-f", CSCOPE_DB], root)
     defs = assign_qnames(ctags_defs(root))
     if incremental:
@@ -898,16 +1237,38 @@ def build(root: str, db_path: str, jobs: int,
 
     fn_names = sweep_names(fn_index)
     gv_names = sweep_names(gv_index)
-    print(f"[L1] cscope 邊:calls(-dL3)x{len(fn_names)} + "
-          f"reads/writes x{len(gv_names)} + includes,{jobs} workers …")
+    # D17 Day2:先試 crossref 直讀(一次掃描取得全部查詢結果);失敗則
+    # 大聲降級為逐符號 cscope 常駐行程查詢(P7:不靜默,結果等價但慢)。
+    xref: XrefMaps | None = None
+    try:
+        xref = parse_cscope_crossref(
+            os.path.join(root, CSCOPE_DB),
+            want_calls=set(fn_index) | set(mc_index),
+            want_refs=set(gv_index))
+    except (CrossrefError, OSError, MemoryError) as e:
+        print(f"WARNING: cscope crossref 直讀失敗({e})——降級為"
+              "逐符號 cscope 查詢(慢,結果等價)")
+    print(f"[L1] cscope 邊:calls x{len(fn_names)} + "
+          f"reads/writes x{len(gv_names)} + includes"
+          f"({'crossref 直讀' if xref else f'{jobs} workers'})…")
     all_headers = [p for p in srcs if p.endswith(HEADER_EXTS)]
     base_count: dict[str, int] = {}
     for h in all_headers:
         base_count[os.path.basename(h)] = base_count.get(os.path.basename(h), 0) + 1
     headers = sorted(aff_headers) if incremental else all_headers
-    with cf.ThreadPoolExecutor(max_workers=jobs) as ex:
+    with _CscopePool(), cf.ThreadPoolExecutor(max_workers=jobs) as ex:
+        def qmap(qflag: str, names: list[str],
+                 xmap: dict[str, list[CscopeRow]] | None
+                 ) -> Any:
+            """xref 查表;無 xref 時逐符號查詢(執行緒池+常駐行程)。"""
+            if xref is not None:
+                assert xmap is not None
+                return (xmap.get(n, []) for n in names)
+            return ex.map(lambda n: cscope_lines(root, qflag, n), names)
+
+        xc, xr, xa, xi = xref if xref is not None else (None,) * 4
         # calls:對每個函式名問「誰呼叫它」(-dL3;-dL2 會漏巢狀內層呼叫)
-        callers_of = ex.map(lambda n: cscope_lines(root, "3", n), fn_names)
+        callers_of = qmap("3", fn_names, xc)
         for name, rows in zip(fn_names, callers_of, strict=True):
             for caller, f, ln, _txt in rows:
                 if caller in ("<global>", "<unknown>"):
@@ -923,8 +1284,8 @@ def build(root: str, db_path: str, jobs: int,
                                  "cscope", meta)
         # reads/writes:reads = L0 站點 - L9 站點;write 站點若同時讀
         # (x++ / x+=1 / x=x+1)補一條 reads(meta.rmw,codex 高風險 5)
-        refs_of = ex.map(lambda n: cscope_lines(root, "0", n), gv_names)
-        writes_of = ex.map(lambda n: cscope_lines(root, "9", n), gv_names)
+        refs_of = qmap("0", gv_names, xr)
+        writes_of = qmap("9", gv_names, xa)
         for name, refs, writes in zip(gv_names, refs_of, writes_of, strict=True):
             wsites = {(f, ln) for _fn, f, ln, _t in writes}
             for kind, rows in (("writes", writes), ("reads", refs)):
@@ -954,7 +1315,7 @@ def build(root: str, db_path: str, jobs: int,
         # -dL3 <macro> 的歸戶與 calls 相同)。D11:tree-sitter 層除役後
         # 真正的缺口是這個維度(wpa 實測 586 個被呼叫的巨集)。
         mc_names = sweep_names(mc_index)
-        users_of = ex.map(lambda n: cscope_lines(root, "3", n), mc_names)
+        users_of = qmap("3", mc_names, xc)
         for name, rows in zip(mc_names, users_of, strict=True):
             for user, f, ln, _txt in rows:
                 if user in ("<global>", "<unknown>"):
@@ -969,8 +1330,11 @@ def build(root: str, db_path: str, jobs: int,
                              "cscope", meta)
         # includes:file → file;#include 內容與 header 路徑比對
         # (重名 header 防錯連,codex 高風險 4)
-        includers = ex.map(
-            lambda h: cscope_lines(root, "8", os.path.basename(h)), headers)
+        includers = (
+            (xi.get(os.path.basename(h), []) for h in headers)
+            if xi is not None else ex.map(
+                lambda h: cscope_lines(root, "8", os.path.basename(h)),
+                headers))
         for hdr, rows in zip(headers, includers, strict=True):
             for _f2, f, ln, txt in rows:
                 if f not in file_ids or f == hdr:
