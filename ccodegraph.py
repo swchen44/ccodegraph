@@ -1145,12 +1145,13 @@ def build(root: str, db_path: str, jobs: int,
         # 邊會永久丟失——wpa data→addEvent 類,136 邊漂移的根因)
         oldcon2 = sqlite3.connect(f"file:{db_path}?mode=ro", uri=True)
         for row in oldcon2.execute(
-                "SELECT n1.qname, n1.name, n2.qname, n2.name, e.kind, "
+                "SELECT n1.qname, n1.kind, n1.name, "
+                "n2.qname, n2.kind, n2.name, e.kind, "
                 "e.file, e.line, e.origin, e.confidence, e.meta "
                 "FROM edges e JOIN nodes n1 ON n1.id=e.src "
                 "JOIN nodes n2 ON n2.id=e.dst "
                 "WHERE e.origin IN ('cscope', 'clink')"):
-            _sq, sn, _dq, dn, _k, ef, _ln, _o, _c, _m = row
+            _sq, _sk, sn, _dq, _dk, dn, _k, ef, _ln, _o, _c, _m = row
             if ef in touched or ef in deleted:
                 continue
             if sn in def_changed:
@@ -1228,11 +1229,14 @@ def build(root: str, db_path: str, jobs: int,
              CONFIDENCE[origin], meta))
 
     if incremental:
-        qid = {q: i for q, i in con.execute(
-            "SELECT qname, id FROM nodes")}
+        # 鍵必須含 kind:qname 跨 kind 可撞名(wpa_printf 同時是 function
+        # 與 macro 節點,UNIQUE(qname,kind) 允許)——單以 qname 對映會把
+        # 函式 dst 的 kept 邊錯接到 macro 節點(wpa 實測 +12,577 條污染)。
+        qid = {(q, kd): i for q, kd, i in con.execute(
+            "SELECT qname, kind, id FROM nodes")}
         n_kept = 0
-        for sq, _sn, dq, _dn, k, ef, ln, o, c, m in kept_edges:
-            si, di = qid.get(sq), qid.get(dq)
+        for sq, sk, _sn, dq, dk, _dn, k, ef, ln, o, c, m in kept_edges:
+            si, di = qid.get((sq, sk)), qid.get((dq, dk))
             if si is not None and di is not None:
                 con.execute(
                     "INSERT OR IGNORE INTO edges (src,dst,kind,file,line,"

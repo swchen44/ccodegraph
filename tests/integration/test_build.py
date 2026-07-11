@@ -234,8 +234,9 @@ def snapshot(db):
         "SELECT qname, kind, file, line_start, line_end, is_static, "
         "COALESCE(signature,'') FROM nodes"))
     edges = set(con.execute(
-        "SELECT n1.qname, n2.qname, e.kind, e.origin, COALESCE(e.file,''), "
-        "COALESCE(e.line,-1) FROM edges e JOIN nodes n1 ON n1.id=e.src "
+        "SELECT n1.qname, n1.kind, n2.qname, n2.kind, e.kind, e.origin, "
+        "COALESCE(e.file,''), COALESCE(e.line,-1) "
+        "FROM edges e JOIN nodes n1 ON n1.id=e.src "
         "JOIN nodes n2 ON n2.id=e.dst WHERE e.origin != 'clink'"))
     con.close()
     return nodes, edges
@@ -286,6 +287,29 @@ class TestIncremental(unittest.TestCase):
         self.assertIn(("fresh_fn", "add", "calls"), edges)   # 新邊進來
         self.assertIn(("main", "add", "calls"), edges)        # 舊邊保留
         self.assertIn(("do_start", "alt_init.c::app_init", "calls"), edges)
+
+    def test_incremental_dual_kind_name_keeps_dst_kind(self):
+        # wpa_printf 教訓:同名節點可同時是 function 與 macro
+        # (UNIQUE(qname,kind) 允許同 qname 不同 kind)。kept-edge 若只以
+        # qname 重接 id,函式 dst 的邊會被錯接到 macro 節點(wpa 實測
+        # +12,577 條污染)——必須以 (qname, kind) 對映。
+        with open(os.path.join(self.root, "dual.c"), "w") as fh:
+            fh.write("#ifdef USE_MACRO\n"
+                     "#define dualname(x) (x)\n"
+                     "#else\n"
+                     "int dualname(int v) { return v; }\n"
+                     "#endif\n"
+                     "int use_dual(void) { return dualname(7); }\n")
+        ig.build(self.root, self.db, jobs=4)          # 全量含 dual-kind 邊
+        # touch 一個「不含 dualname 識別字」的檔 → dualname 的邊走 kept 路徑
+        with open(os.path.join(self.root, "util.c"), "a") as fh:
+            fh.write("\nint fresh_kept(void) { return 0; }\n")
+        ig.build(self.root, self.db, jobs=4, incremental=True)
+        inc = snapshot(self.db)
+        full_db = self.db + ".full"
+        ig.build(self.root, full_db, jobs=4)
+        full = snapshot(full_db)
+        self.assertEqual(inc[1], full[1], "kept-edge kind rewiring diverges")
 
     def test_incremental_deleted_file(self):
         os.remove(os.path.join(self.root, "alt_init2.c"))
