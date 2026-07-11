@@ -631,6 +631,21 @@ XrefMaps = tuple[dict[str, list[CscopeRow]], dict[str, list[CscopeRow]],
                  dict[str, list[CscopeRow]], dict[str, list[CscopeRow]]]
 
 
+def _iter_crossref_lines(fh: Any, chunk_size: int = 1 << 26) -> Any:
+    """64MB chunk + 殘尾接續的行迭代器(不含行尾 \\n)。
+    與整檔 split(b"\\n") 逐行等價,但峰值記憶體 = 一個 chunk。"""
+    carry = b""
+    while True:
+        chunk = fh.read(chunk_size)
+        if not chunk:
+            if carry:
+                yield carry
+            return
+        parts = (carry + chunk).split(b"\n")
+        carry = parts.pop()
+        yield from parts
+
+
 def parse_cscope_crossref(db_path: str, want_calls: set[str],
                           want_refs: set[str]) -> XrefMaps:
     """D17 Day2:單遍解析 cscope -c(未壓縮)crossref,一次取得「所有」
@@ -659,153 +674,150 @@ def parse_cscope_crossref(db_path: str, want_calls: set[str],
     - -L9 等價:符號「存入 crossref 的出現位置」後方文字片段以賦值運算子
       開頭(== 不算、++/-- 不算;每行只看第一次出現——cscope 亦然)。
     - 同名同行去重:refs/calls 取第一個 entry,assigns 任一 entry 通過。
+
+    記憶體:按 64MB chunk 串流(kernel 全樹的 -c crossref ~1.2GB,整檔
+    split 進 list 會在 8GB 機器上爆);峰值 = 一個 chunk + 進行中的 maps。
     """
-    with open(db_path, "rb") as fh:
-        data = fh.read()
-    lines = data.split(b"\n")
-    header = lines[0].decode("utf-8", "replace")
-    if not header.startswith("cscope 15 ") or " -c " not in header:
-        raise CrossrefError(f"非 cscope 15 -c 格式:{header[:60]!r}")
+    fh = open(db_path, "rb")  # noqa: SIM115 — 生命週期跨 generator,下方 with 收
+    with fh:
+        header = fh.readline().decode("utf-8", "replace").rstrip("\n")
+        if not header.startswith("cscope 15 ") or " -c " not in header:
+            raise CrossrefError(f"非 cscope 15 -c 格式:{header[:60]!r}")
 
-    calls: dict[str, list[CscopeRow]] = {}
-    refs: dict[str, list[CscopeRow]] = {}
-    assigns: dict[str, list[CscopeRow]] = {}
-    includes: dict[str, list[CscopeRow]] = {}   # basename(寫入路徑) → rows
+        calls: dict[str, list[CscopeRow]] = {}
+        refs: dict[str, list[CscopeRow]] = {}
+        assigns: dict[str, list[CscopeRow]] = {}
+        includes: dict[str, list[CscopeRow]] = {}  # basename(寫入路徑)→rows
 
-    cur_file = ""
-    func = "<global>"
-    shadows: list[str] = []   # 嵌套 $ 時被遮蔽的外層 func(雙發射候選)
-    macro: str | None = None
-    sticky: dict[str, str] = {}
-    i, n = 1, len(lines)
-    while i < n:
-        ln = lines[i]
-        if ln.startswith(b"\t@"):
-            fname = ln[2:]
-            if not fname:                     # trailer:解析結束
-                break
-            cur_file = fname.decode("utf-8", "replace")
-            func, shadows, macro, sticky = "<global>", [], None, {}
-            i += 1
-            continue
-        if ln[:1].isdigit():                  # 行記錄
-            sp = ln.find(b" ")
-            lineno = int(ln[:sp])
-            frags = [ln[sp + 1:]]
-            entries: list[tuple[bytes, bytes, int]] = []
-            i += 1
-            expect_sym = True
-            while i < n:
-                cur = lines[i]
-                if expect_sym:
-                    if cur == b"":            # 符號位置空行=終止
-                        break
-                    if cur.startswith(b"\t"):
-                        entries.append((cur[1:2], cur[2:], len(frags)))
+        cur_file = ""
+        func = "<global>"
+        shadows: list[str] = []  # 嵌套 $ 時被遮蔽的外層 func(雙發射候選)
+        macro: str | None = None
+        sticky: dict[str, str] = {}
+        it = _iter_crossref_lines(fh)
+        saw_trailer = False
+        for ln in it:
+            if ln.startswith(b"\t@"):
+                fname = ln[2:]
+                if not fname:                 # trailer:解析結束
+                    saw_trailer = True
+                    break
+                cur_file = fname.decode("utf-8", "replace")
+                func, shadows, macro, sticky = "<global>", [], None, {}
+                continue
+            if ln[:1].isdigit():              # 行記錄
+                sp = ln.find(b" ")
+                lineno = int(ln[:sp])
+                frags = [ln[sp + 1:]]
+                entries: list[tuple[bytes, bytes, int]] = []
+                expect_sym = True
+                for cur in it:
+                    if expect_sym:
+                        if cur == b"":        # 符號位置空行=終止(已消耗)
+                            break
+                        if cur.startswith(b"\t"):
+                            entries.append((cur[1:2], cur[2:], len(frags)))
+                        else:
+                            entries.append((b"", cur, len(frags)))
                     else:
-                        entries.append((b"", cur, len(frags)))
-                else:
-                    frags.append(cur)
-                expect_sym = not expect_sym
-                i += 1
-            i += 1                            # 吃掉終止空行
-            text: str | None = None           # 懶重建(多數行沒人要)
-            rec_seen: set[tuple[str, str, str]] = set()
-            for mark, bname, fidx in entries:
-                if mark == b")":
-                    macro = None
-                    continue
-                if mark == b"}":
-                    func = "<global>"
-                    shadows = []
-                    continue
-                if not bname:
-                    continue
-                nm = bname.decode("utf-8", "replace")
-                if mark == b"$":
-                    # 嵌套 $(前一函式沒有 } 就出現新 $)= 掃描器的假標記:
-                    # C++ 建構子初始化列表(`: wpagui(_wpagui)`)產生假內層,
-                    # 巨集生成函式的頂層呼叫(`BIT_SH(bit_rol, brol)`)產生
-                    # 假外層——哪個是真 caller 掃描層無從判定。解法:外層
-                    # 進 shadows,之後每站點對全部候選「雙發射」,交給
-                    # attribute_src 以節點存在+行區間仲裁(重現 cscope
-                    # 查詢端雙報+舊管線過濾的實際行為;wpa/redis 邊差分
-                    # 實證此路徑損失最小)。
-                    if func != "<global>" and func != nm \
-                            and func not in shadows:
-                        shadows.append(func)
-                    func = nm
-                    macro = None
-                want_inc = mark == b"~"
-                want_c = mark == b"`" and nm in want_calls
-                want_r = not want_inc and nm in want_refs
-                if not (want_inc or want_c or want_r):
-                    # 黏滯只在同名符號自己發射時被讀,無關名字不必簿記
+                        frags.append(cur)
+                    expect_sym = not expect_sym
+                text: str | None = None       # 懶重建(多數行沒人要)
+                rec_seen: set[tuple[str, str, str]] = set()
+                for mark, bname, fidx in entries:
+                    if mark == b")":
+                        macro = None
+                        continue
+                    if mark == b"}":
+                        func = "<global>"
+                        shadows = []
+                        continue
+                    if not bname:
+                        continue
+                    nm = bname.decode("utf-8", "replace")
+                    if mark == b"$":
+                        # 嵌套 $(前一函式沒有 } 就出現新 $)= 掃描器的假
+                        # 標記:C++ 建構子初始化列表(`: wpagui(_wpagui)`)
+                        # 產生假內層,巨集生成函式的頂層呼叫
+                        # (`BIT_SH(bit_rol, brol)`)產生假外層——哪個是真
+                        # caller 掃描層無從判定。解法:外層進 shadows,之後
+                        # 每站點對全部候選「雙發射」,交給 attribute_src 以
+                        # 節點存在+行區間仲裁(重現 cscope 查詢端雙報+舊
+                        # 管線過濾的實際行為;wpa/redis 邊差分實證此路徑
+                        # 損失最小)。
+                        if func != "<global>" and func != nm \
+                                and func not in shadows:
+                            shadows.append(func)
+                        func = nm
+                        macro = None
+                    want_inc = mark == b"~"
+                    want_c = mark == b"`" and nm in want_calls
+                    want_r = not want_inc and nm in want_refs
+                    if not (want_inc or want_c or want_r):
+                        # 黏滯只在同名符號自己發射時被讀,無關名字不必簿記
+                        if mark == b"#":
+                            macro = nm
+                        continue
+                    if text is None:
+                        parts: list[bytes] = []
+                        fi = 0
+                        for _m2, nm2, fx2 in entries:
+                            parts.extend(frags[fi:fx2])
+                            fi = fx2
+                            parts.append(nm2)
+                        parts.extend(frags[fi:])
+                        text = b"".join(parts).decode("utf-8", "replace")
+                    if want_inc:
+                        base = nm[1:].rsplit("/", 1)[-1]  # nm=引號字元+路徑
+                        includes.setdefault(base, []).append(
+                            ("<global>", cur_file, lineno, text))
+                        continue
+                    cur_scope = macro if macro is not None else func
+                    if cur_scope != "<global>":
+                        emits = [cur_scope] + \
+                            [s for s in shadows if macro is None]
+                    elif mark and mark.isalpha():
+                        emits = ["<global>"]
+                    else:
+                        emits = [sticky.get(nm, "<global>")]
+                    if macro is None:
+                        sticky[nm] = emits[0]
+                    is_assign = (fidx < len(frags)
+                                 and _XREF_ASSIGN_RE.match(frags[fidx]))
+                    for emit in emits:
+                        row: CscopeRow = (emit, cur_file, lineno, text)
+                        if want_r and ("r", nm, emit) not in rec_seen:
+                            rec_seen.add(("r", nm, emit))
+                            refs.setdefault(nm, []).append(row)
+                        if want_c and ("c", nm, emit) not in rec_seen:
+                            rec_seen.add(("c", nm, emit))
+                            calls.setdefault(nm, []).append(row)
+                        if (want_r and is_assign
+                                and ("a", nm, emit) not in rec_seen):
+                            rec_seen.add(("a", nm, emit))
+                            assigns.setdefault(nm, []).append(row)
                     if mark == b"#":
                         macro = nm
-                    continue
-                if text is None:
-                    parts: list[bytes] = []
-                    fi = 0
-                    for _m2, nm2, fx2 in entries:
-                        parts.extend(frags[fi:fx2])
-                        fi = fx2
-                        parts.append(nm2)
-                    parts.extend(frags[fi:])
-                    text = b"".join(parts).decode("utf-8", "replace")
-                if want_inc:
-                    base = nm[1:].rsplit("/", 1)[-1]   # nm=引號字元+路徑
-                    includes.setdefault(base, []).append(
-                        ("<global>", cur_file, lineno, text))
-                    continue
-                cur_scope = macro if macro is not None else func
-                if cur_scope != "<global>":
-                    emits = [cur_scope] + \
-                        [s for s in shadows if macro is None]
-                elif mark and mark.isalpha():
-                    emits = ["<global>"]
-                else:
-                    emits = [sticky.get(nm, "<global>")]
-                if macro is None:
-                    sticky[nm] = emits[0]
-                is_assign = (fidx < len(frags)
-                             and _XREF_ASSIGN_RE.match(frags[fidx]))
-                for emit in emits:
-                    row: CscopeRow = (emit, cur_file, lineno, text)
-                    if want_r and ("r", nm, emit) not in rec_seen:
-                        rec_seen.add(("r", nm, emit))
-                        refs.setdefault(nm, []).append(row)
-                    if want_c and ("c", nm, emit) not in rec_seen:
-                        rec_seen.add(("c", nm, emit))
-                        calls.setdefault(nm, []).append(row)
-                    if (want_r and is_assign
-                            and ("a", nm, emit) not in rec_seen):
-                        rec_seen.add(("a", nm, emit))
-                        assigns.setdefault(nm, []).append(row)
-                if mark == b"#":
-                    macro = nm
-            continue
-        if ln.startswith(b"\t"):              # 記錄外裸標記(多行 #define 的 ))
-            mark, bnm = ln[1:2], ln[2:]
-            if mark == b")":
-                macro = None
-            elif mark == b"}":
-                func = "<global>"
-                shadows = []
-            elif mark == b"$" and bnm:
-                bare_fn = bnm.decode("utf-8", "replace")
-                if func != "<global>" and func != bare_fn \
-                        and func not in shadows:
-                    shadows.append(func)
-                func = bare_fn
-                macro = None
-            elif mark == b"#" and bnm:
-                macro = bnm.decode("utf-8", "replace")
-            i += 1
-            continue
-        i += 1
-    else:
-        raise CrossrefError("crossref 無 trailer(檔案截斷?)")
+                continue
+            if ln.startswith(b"\t"):          # 記錄外裸標記(多行 #define 的 ))
+                mark, bnm = ln[1:2], ln[2:]
+                if mark == b")":
+                    macro = None
+                elif mark == b"}":
+                    func = "<global>"
+                    shadows = []
+                elif mark == b"$" and bnm:
+                    bare_fn = bnm.decode("utf-8", "replace")
+                    if func != "<global>" and func != bare_fn \
+                            and func not in shadows:
+                        shadows.append(func)
+                    func = bare_fn
+                    macro = None
+                elif mark == b"#" and bnm:
+                    macro = bnm.decode("utf-8", "replace")
+                continue
+        if not saw_trailer:
+            raise CrossrefError("crossref 無 trailer(檔案截斷?)")
     return calls, refs, assigns, includes
 
 
