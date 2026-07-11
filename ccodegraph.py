@@ -505,17 +505,17 @@ class CscopeWorker:
 
     def _readline(self) -> bytes | None:
         """讀一行(去行尾);None=timeout、b""=EOF(行程亡故)。"""
+        stdout = self.proc.stdout
+        assert stdout is not None
         deadline = time.monotonic() + _CSCOPE_QUERY_TIMEOUT
         while b"\n" not in self._buf:
             left = deadline - time.monotonic()
             if left <= 0:
                 return None
-            ready, _, _ = select.select([self.proc.stdout], [], [],
-                                        min(left, 5.0))
+            ready, _, _ = select.select([stdout], [], [], min(left, 5.0))
             if not ready:
                 continue
-            assert self.proc.stdout is not None
-            chunk = os.read(self.proc.stdout.fileno(), 65536)
+            chunk = os.read(stdout.fileno(), 65536)
             if not chunk:
                 return b""
             self._buf += chunk
