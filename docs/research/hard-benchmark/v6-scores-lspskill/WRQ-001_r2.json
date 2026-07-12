@@ -1,0 +1,1 @@
+{"lsp":{"score":3,"justification":"The answer correctly identifies the canonical function-body definition at `src/utils/eloop.c:601` and gives the full 5-parameter `int` signature matching the GT. It also correctly distinguishes `src/utils/eloop.h:179` as a declaration rather than the definition; omission of the Windows-only alternate is not penalized."}}

@@ -1,0 +1,1 @@
+{"lsp":{"score":3,"justification":"The answer gives the exact GT count of 70 and supports it with a whole-repo grep over .c files plus a cross-check against a broader pattern, correctly excluding a commented util.c mention. It also explicitly notes no src/-vs-whole-repo ambiguity and no additional .c files outside src include server.h, matching the full-credit rubric."}}

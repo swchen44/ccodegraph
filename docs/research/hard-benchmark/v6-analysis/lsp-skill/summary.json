@@ -1,0 +1,107 @@
+[
+  {
+    "cost_usd": 0.3913729000000001,
+    "input_tokens": 5082,
+    "output_tokens": 3183,
+    "cache_read": 461433,
+    "cache_creation": 31502,
+    "num_turns": 14,
+    "duration_ms": 56157,
+    "duration_api_ms": 57563,
+    "is_error": false,
+    "session_id": "a1fd46e2-db61-48c4-8f73-16c4fbaeeb48",
+    "model_usage_keys": [
+      "claude-sonnet-5",
+      "claude-haiku-4-5-20251001"
+    ],
+    "id": "WRQ-004",
+    "tool": "lspskill",
+    "rep": 1,
+    "wall_s": 58.0,
+    "rc": 0
+  },
+  {
+    "cost_usd": 1.199772,
+    "input_tokens": 7401,
+    "output_tokens": 24594,
+    "cache_read": 1539130,
+    "cache_creation": 57655,
+    "num_turns": 54,
+    "duration_ms": 284927,
+    "duration_api_ms": 284698,
+    "is_error": false,
+    "session_id": "532e465b-c1cf-46ca-9919-78b9169d1342",
+    "model_usage_keys": [
+      "claude-haiku-4-5-20251001",
+      "claude-sonnet-5"
+    ],
+    "id": "WRQ-013",
+    "tool": "lspskill",
+    "rep": 1,
+    "wall_s": 286.7,
+    "rc": 0
+  },
+  {
+    "cost_usd": 0.22434149999999997,
+    "input_tokens": 4515,
+    "output_tokens": 3397,
+    "cache_read": 232345,
+    "cache_creation": 14869,
+    "num_turns": 8,
+    "duration_ms": 52746,
+    "duration_api_ms": 53528,
+    "is_error": false,
+    "session_id": "98f85ddf-15c8-4e0f-aa7b-69a2295bbb3d",
+    "model_usage_keys": [
+      "claude-haiku-4-5-20251001",
+      "claude-sonnet-5"
+    ],
+    "id": "WRQ-016",
+    "tool": "lspskill",
+    "rep": 1,
+    "wall_s": 55.1,
+    "rc": 0
+  },
+  {
+    "cost_usd": 0.27563689999999996,
+    "input_tokens": 4517,
+    "output_tokens": 4362,
+    "cache_read": 263273,
+    "cache_creation": 19449,
+    "num_turns": 8,
+    "duration_ms": 58603,
+    "duration_api_ms": 59380,
+    "is_error": false,
+    "session_id": "22af1313-efe3-4e9c-8cc2-87c76939f3ca",
+    "model_usage_keys": [
+      "claude-haiku-4-5-20251001",
+      "claude-sonnet-5"
+    ],
+    "id": "WRQ-019",
+    "tool": "lspskill",
+    "rep": 1,
+    "wall_s": 60.4,
+    "rc": 0
+  },
+  {
+    "cost_usd": 0.3900564,
+    "input_tokens": 4832,
+    "output_tokens": 9845,
+    "cache_read": 404858,
+    "cache_creation": 17571,
+    "num_turns": 12,
+    "duration_ms": 102098,
+    "duration_api_ms": 104090,
+    "is_error": false,
+    "session_id": "4ef23c73-2172-4a9c-a0d0-df0c54323f59",
+    "model_usage_keys": [
+      "claude-haiku-4-5-20251001",
+      "claude-sonnet-5"
+    ],
+    "id": "WRQ-009",
+    "tool": "lspskill",
+    "rep": 1,
+    "wall_s": 104.1,
+    "rc": 0
+  }
+]

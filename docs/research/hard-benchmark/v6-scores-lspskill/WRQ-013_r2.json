@@ -1,0 +1,1 @@
+{"lsp":{"score":3,"justification":"Fully matches the corrected GT: 49 whole functions (35 Makefile-gated in src/common/sae.c plus 14 in src/ap/ieee802_11.c) and 9 partial functions with the same function names/files as the reference. It also correctly excludes out-of-scope wpa_supplicant/sme.c and reports the GT total of 58."}}

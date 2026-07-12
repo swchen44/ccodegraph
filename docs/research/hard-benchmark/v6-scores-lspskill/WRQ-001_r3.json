@@ -1,0 +1,1 @@
+{"lsp":{"score":3,"justification":"The answer matches the GT’s required canonical definition: `src/utils/eloop.c` at line 601 with the full `int` return type and all five parameters (`secs`, `usecs`, `handler`, `eloop_data`, `user_data`). It also correctly distinguishes `eloop.h:179` as a declaration only; omitting the Windows-only alternate is not penalized by the rubric."}}

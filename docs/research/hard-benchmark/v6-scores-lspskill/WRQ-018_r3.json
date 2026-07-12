@@ -1,0 +1,1 @@
+{"lsp":{"score":3,"justification":"The answer matches the GT: it enumerates all 26 src/eap_common/*.c os_malloc call sites, concludes no leaks, and correctly treats the three returned buffers and seven ikev2_derive_sk_keys struct-field allocations as ownership transfers with error-path cleanup. Minor naming/method-note issues do not affect the substantive lifetime analysis."}}

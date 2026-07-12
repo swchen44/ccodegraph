@@ -1,0 +1,1 @@
+{"lsp":{"score":3,"justification":"The answer gives the exact GT count of 70 and explicitly notes all matches are under src/ with no matches in modules/ or deps/, plus checks for duplicates and commented false positives. Although its displayed file list includes src/evict.c, which is not in the GT list, the scored answer and methodology match the rubric’s full-credit criteria."}}

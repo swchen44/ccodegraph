@@ -1,0 +1,1 @@
+{"lsp":{"score":3,"justification":"The answer matches the GT: it gives the exact struct definition with next/prev, explicitly flags that src/utils/list.c does not exist, and redirects to list.h for all six static inline functions. It also mentions the relevant iteration/access macros, including the dl_list_for_each family and first/last, so it satisfies the full-credit rubric."}}

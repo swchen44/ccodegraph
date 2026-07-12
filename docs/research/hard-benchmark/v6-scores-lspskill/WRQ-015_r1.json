@@ -1,0 +1,1 @@
+{"lsp":{"score":3,"justification":"The answer matches the GT’s key scoring points: true direct count is 117 by including both `\"eloop.h\"` and `\"utils/eloop.h\"`, not the naive 59, and it states no headers include `eloop.h`, so the transitive closure adds zero files. Minor presentation quirks in the grouped list do not affect correctness."}}

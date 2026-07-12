@@ -1,0 +1,1 @@
+{"lsp":{"score":2,"justification":"The answer correctly says eloop.c has no locks/mutexes/RCU/atomics and supports that with file-local grep/include/list evidence. However, it does not perform or cite the GT-required repo-wide pthread_create/pthread_* absence check, instead asserting the single-threaded design without that counter-evidence search."}}

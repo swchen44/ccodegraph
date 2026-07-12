@@ -1,0 +1,1 @@
+{"lsp":{"score":3,"justification":"Matches the GT exactly: it identifies the only by-name passing site as `int_array_sort_unique()` at `src/utils/common.c:895`, passed as the 4th argument to `qsort()`, and correctly notes it is not a direct call. It also supports exhaustiveness via whole-repo/LSP references and `static` linkage, with no extra transitive callers listed."}}

@@ -1,0 +1,1 @@
+{"lsp":{"score":3,"justification":"Fully correct: it gives the exact struct definition with next/prev, explicitly flags that src/utils/list.c does not exist and that the implementation is header-only, then redirects to list.h and lists all six static inline functions plus the relevant iteration/access macros and initializers. This matches the GT rubric for full credit."}}

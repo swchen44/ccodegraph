@@ -1,0 +1,1 @@
+{"lsp":{"score":3,"justification":"The answer lists all 96 filled function-pointer fields from the GT with the correct implementing function names, including the conditional TDLS, Android, and mesh entries near the end of the struct. Minor internal wording/count slips such as saying “unconditional 88” do not affect the substantive completeness of the 96 required pairs."}}

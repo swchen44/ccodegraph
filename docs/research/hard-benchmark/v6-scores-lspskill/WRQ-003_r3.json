@@ -1,0 +1,1 @@
+{"lsp":{"score":3,"justification":"Fully correct: it gives the definition as src/drivers/driver.h:1633 and the source-level function-pointer field count as 142, matching the GT. It also correctly notes the 22 #ifdef-gated fields and the 120 as-configured count as a caveat, which the GT treats as bonus rigor rather than a penalty."}}

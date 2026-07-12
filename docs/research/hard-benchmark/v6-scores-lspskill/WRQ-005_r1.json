@@ -1,0 +1,1 @@
+{"lsp":{"score":3,"justification":"The answer reports exactly the 7 real src/t_string.c call sites at lines 128, 207, 543, 894, 1347, 1629, and 1630, and explicitly excludes line 186 as a comment. It includes no out-of-scope references from other files, so it fully matches the GT rubric."}}

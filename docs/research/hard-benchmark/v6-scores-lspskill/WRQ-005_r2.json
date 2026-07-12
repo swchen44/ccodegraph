@@ -1,0 +1,1 @@
+{"lsp":{"score":3,"justification":"The answer reports exactly the 7 real `decrRefCount()` references in `src/t_string.c` at lines 128, 207, 543, 894, 1347, 1629, and 1630, with no other-file references. It also explicitly excludes line 186 as a comment, matching the GT; the small IFEQ/IFGT wording typo does not affect the reference list."}}

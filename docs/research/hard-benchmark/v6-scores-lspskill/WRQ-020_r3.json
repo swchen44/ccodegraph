@@ -1,0 +1,1 @@
+{"lsp":{"score":2,"justification":"The answer correctly says eloop.c has no locks/mutex/RCU and supports it with grep-style evidence plus discussion of plain dl_list/socket table operations and signal flag deferral. It does not perform or report the GT-required repo-wide pthread_create/pthread_* absence check, so it misses the explicit full-credit dimension."}}

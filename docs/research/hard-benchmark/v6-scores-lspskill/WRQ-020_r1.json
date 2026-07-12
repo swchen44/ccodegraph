@@ -1,0 +1,1 @@
+{"lsp":{"score":2,"justification":"The answer correctly says eloop.c has no locks/mutexes/RCU and supports it with file-level grep/include/list/signal-handler evidence. However, it does not perform or cite the repo-wide `pthread_create`/`pthread_*` absence check that the GT requires for full credit."}}

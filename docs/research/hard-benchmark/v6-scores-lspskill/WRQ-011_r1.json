@@ -1,0 +1,1 @@
+{"lsp":{"score":3,"justification":"The answer fully matches the GT: it gives the correct struct definition and fields, explicitly flags that src/utils/list.c does not exist, and redirects to list.h with all six inline functions plus the relevant iteration/accessor macros."}}

@@ -1,0 +1,1 @@
+{"lsp":{"score":3,"justification":"Matches the GT exactly for the Redis server definition: `src/object.c:338` with full signature `robj *createStringObject(const char *ptr, size_t len)` and confirms it is the function body. It also correctly notes the unrelated static same-name hiredis definition, which the GT says should not be penalized."}}

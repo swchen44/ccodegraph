@@ -1,0 +1,1 @@
+{"lsp":{"score":3,"justification":"The answer’s actual function lists match the GT: it includes the 14 whole functions in src/ap/ieee802_11.c, all 35 Makefile-gated src/common/sae.c functions, and the same 9 partial functions. It miscounts sae.c as 33 and totals as 47/56 instead of 49/58, but the named functions and classifications are complete per the GT."}}

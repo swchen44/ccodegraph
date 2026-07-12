@@ -1,0 +1,1 @@
+{"lsp":{"score":3,"justification":"Fully correct: it lists all 10 GT references with the correct split, files, line numbers, and kinds across both src/utils/eloop.c and src/utils/eloop_win.c. It also correctly states that there are no string-literal or comment false positives and explains the two static backend implementations without excluding either."}}

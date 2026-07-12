@@ -1,0 +1,1 @@
+{"lsp":{"score":3,"justification":"Matches the GT: it identifies the only by-name passing site as `qsort(a, alen, sizeof(int), freq_cmp)` inside `int_array_sort_unique()` at `src/utils/common.c:895`, with `freq_cmp` as the 4th comparator argument. It also clearly states there are no other uses and does not confuse transitive callers with passing sites."}}

@@ -1,0 +1,1 @@
+{"lsp":{"score":3,"justification":"Fully matches the GT: it identifies exactly the five accepted functions and the correct direct/via-setGenericCommand call sites with matching line evidence. It also avoids the key false positives by excluding the db.c setKey path and reporting no other t_string.c direct or setGenericCommand callers."}}

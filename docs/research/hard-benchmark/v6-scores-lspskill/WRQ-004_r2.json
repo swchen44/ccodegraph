@@ -1,0 +1,1 @@
+{"lsp":{"score":3,"justification":"Matches the GT exactly: all 10 real references are listed with the correct two files and line numbers, including both platform-alternate backends. It also correctly reports that there are no string/comment false positives and no other references under src/."}}

@@ -1,0 +1,1 @@
+{"lsp":{"score":3,"justification":"The answer exactly matches the GT: it reports 7 real src/t_string.c references at lines 128, 207, 543, 894, 1347, 1629, and 1630. It also correctly identifies and excludes line 186 as a comment and includes no out-of-scope references."}}

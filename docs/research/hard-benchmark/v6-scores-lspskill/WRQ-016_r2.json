@@ -1,0 +1,1 @@
+{"lsp":{"score":2,"justification":"The answer gives the correct count of 70 and supports it with a grep-based file list and uniqueness/non-comment checks, matching the GT’s core result. However, it does not explicitly state that a whole-repo search found zero additional .c files in deps/, tests/, or modules/, which the rubric calls out as required for full credit."}}

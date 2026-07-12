@@ -1,0 +1,1 @@
+{"lsp":{"score":3,"justification":"Matches the GT: gives the true direct-includer count of 117 by combining 59 bare `\"eloop.h\"` includes with 58 `\"utils/eloop.h\"` includes, with no overlap, and lists the expected files. It also correctly confirms that no headers include `eloop.h`, so the transitive closure adds zero files and the direct set equals the full dependency set."}}

@@ -1,0 +1,1 @@
+{"lsp":{"score":3,"justification":"Matches the GT: it identifies the actual construction in checkType() via addReplyErrorObject(c, shared.wrongtypeerr) and correctly ties it to SET-specific paths through setGenericCommand: the GET option and the IFEQ/IFNE/IFDEQ/IFDNE branch. It also explicitly notes that plain SET overwrites without WRONGTYPE and excludes other command paths."}}

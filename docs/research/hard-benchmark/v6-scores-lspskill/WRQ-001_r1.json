@@ -1,0 +1,1 @@
+{"lsp":{"score":3,"justification":"Matches the GT: it identifies `src/utils/eloop.c:601` as the actual definition and gives the full `int` signature with all five parameters. It also correctly distinguishes `src/utils/eloop.h:179` as only a prototype; omitting the Windows-only alternate is not penalized."}}

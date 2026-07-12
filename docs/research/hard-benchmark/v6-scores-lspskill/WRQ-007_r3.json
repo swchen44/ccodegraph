@@ -1,0 +1,1 @@
+{"lsp":{"score":3,"justification":"The answer exactly matches the GT result set: setGenericCommand directly calls setKeyByLink, and setCommand, setnxCommand, setexCommand, and psetexCommand call it via setGenericCommand, with the expected line evidence. It also correctly excludes the setKey/db.c wrapper path and msetGenericCommand, so it does not over-count the mset family."}}

@@ -1,0 +1,1 @@
+{"lsp":{"score":3,"justification":"The answer exactly identifies the only by-name passing site: `int_array_sort_unique()` in `src/utils/common.c` at line 895, passing `freq_cmp` as the 4th argument to `qsort()`. It also correctly states exhaustiveness via only two references/static linkage and does not list transitive callers or direct-call sites."}}
