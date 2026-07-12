@@ -1,0 +1,1 @@
+{"lsp":{"score":3,"justification":"The answer gives the exact GT count of 70 and states that all matches are in src/ with only the standard `#include \"server.h\"` form and one `server.h`, matching the main scope/ambiguity points. The included file list appears to contain an extra `evict.c` not in the GT list, but the graded question is the count and scope, which are correct."}}

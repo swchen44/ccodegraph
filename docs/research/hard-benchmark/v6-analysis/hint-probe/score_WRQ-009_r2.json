@@ -1,0 +1,1 @@
+{"lsp":{"score":2,"justification":"The answer captures most of the nl80211 ops pairs and goes well beyond the first visible chunk, but it explicitly reports only 91 function-pointer fields while the verified GT has 96 filled fields. It also ends with an unfinished '其餘一般欄位(續)' section, matching the GT's common failure mode of stopping before the end of the struct literal."}}

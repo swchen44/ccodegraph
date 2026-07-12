@@ -1,0 +1,182 @@
+[
+  {
+    "cost_usd": 0.2899163,
+    "input_tokens": 4353,
+    "output_tokens": 6713,
+    "cache_read": 230941,
+    "cache_creation": 17619,
+    "num_turns": 7,
+    "duration_ms": 91681,
+    "duration_api_ms": 62970,
+    "is_error": false,
+    "session_id": "5b7c5de5-47f9-4bf5-ab59-765fcbd66a43",
+    "model_usage_keys": [
+      "claude-haiku-4-5-20251001",
+      "claude-sonnet-5"
+    ],
+    "id": "WRQ-009",
+    "rep": 1,
+    "wall_s": 93.7,
+    "rc": 0
+  },
+  {
+    "cost_usd": 0.2983488,
+    "input_tokens": 5291,
+    "output_tokens": 5884,
+    "cache_read": 274986,
+    "cache_creation": 18429,
+    "num_turns": 11,
+    "duration_ms": 65130,
+    "duration_api_ms": 65991,
+    "is_error": false,
+    "session_id": "afca9830-a112-4099-94e0-97c75ced5074",
+    "model_usage_keys": [
+      "claude-haiku-4-5-20251001",
+      "claude-sonnet-5"
+    ],
+    "id": "WRQ-009",
+    "rep": 2,
+    "wall_s": 67.1,
+    "rc": 0
+  },
+  {
+    "cost_usd": 0.20573800000000003,
+    "input_tokens": 4093,
+    "output_tokens": 4699,
+    "cache_read": 167350,
+    "cache_creation": 11938,
+    "num_turns": 6,
+    "duration_ms": 50771,
+    "duration_api_ms": 51953,
+    "is_error": false,
+    "session_id": "1bae019e-34a3-4a73-8af3-b199cbae098b",
+    "model_usage_keys": [
+      "claude-haiku-4-5-20251001",
+      "claude-sonnet-5"
+    ],
+    "id": "WRQ-009",
+    "rep": 3,
+    "wall_s": 52.5,
+    "rc": 0
+  },
+  {
+    "cost_usd": 0.3412193,
+    "input_tokens": 5037,
+    "output_tokens": 6725,
+    "cache_read": 122731,
+    "cache_creation": 31215,
+    "num_turns": 7,
+    "duration_ms": 82009,
+    "duration_api_ms": 83229,
+    "is_error": false,
+    "session_id": "24dab76f-7fb9-4b00-aec0-94905bf659eb",
+    "model_usage_keys": [
+      "claude-haiku-4-5-20251001",
+      "claude-sonnet-5"
+    ],
+    "id": "WRQ-019",
+    "rep": 1,
+    "wall_s": 83.7,
+    "rc": 0
+  },
+  {
+    "cost_usd": 0.35881500000000005,
+    "input_tokens": 4432,
+    "output_tokens": 7479,
+    "cache_read": 355450,
+    "cache_creation": 20930,
+    "num_turns": 9,
+    "duration_ms": 89818,
+    "duration_api_ms": 90176,
+    "is_error": false,
+    "session_id": "65f67335-4849-4cf0-93df-7e335cf657f9",
+    "model_usage_keys": [
+      "claude-haiku-4-5-20251001",
+      "claude-sonnet-5"
+    ],
+    "id": "WRQ-019",
+    "rep": 2,
+    "wall_s": 91.7,
+    "rc": 0
+  },
+  {
+    "cost_usd": 0.2915953,
+    "input_tokens": 4339,
+    "output_tokens": 5303,
+    "cache_read": 272321,
+    "cache_creation": 19368,
+    "num_turns": 8,
+    "duration_ms": 64500,
+    "duration_api_ms": 65635,
+    "is_error": false,
+    "session_id": "fdff11fd-4daf-4cb6-8036-2ec656c79f3e",
+    "model_usage_keys": [
+      "claude-haiku-4-5-20251001",
+      "claude-sonnet-5"
+    ],
+    "id": "WRQ-019",
+    "rep": 3,
+    "wall_s": 66.6,
+    "rc": 0
+  },
+  {
+    "cost_usd": 0.1302673,
+    "input_tokens": 4294,
+    "output_tokens": 1283,
+    "cache_read": 194031,
+    "cache_creation": 6478,
+    "num_turns": 6,
+    "duration_ms": 22025,
+    "duration_api_ms": 22891,
+    "is_error": false,
+    "session_id": "b3e40d51-20c8-41f4-8621-cf8069033f3d",
+    "model_usage_keys": [
+      "claude-haiku-4-5-20251001",
+      "claude-sonnet-5"
+    ],
+    "id": "WRQ-016",
+    "rep": 1,
+    "wall_s": 23.8,
+    "rc": 0
+  },
+  {
+    "cost_usd": 0.12444849999999999,
+    "input_tokens": 4085,
+    "output_tokens": 1497,
+    "cache_read": 160945,
+    "cache_creation": 6732,
+    "num_turns": 5,
+    "duration_ms": 22258,
+    "duration_api_ms": 23541,
+    "is_error": false,
+    "session_id": "bdbecd78-74cf-4260-b010-89bf7e9c4636",
+    "model_usage_keys": [
+      "claude-haiku-4-5-20251001",
+      "claude-sonnet-5"
+    ],
+    "id": "WRQ-016",
+    "rep": 2,
+    "wall_s": 23.6,
+    "rc": 0
+  },
+  {
+    "cost_usd": 0.11742039999999998,
+    "input_tokens": 4250,
+    "output_tokens": 1429,
+    "cache_read": 160048,
+    "cache_creation": 5693,
+    "num_turns": 5,
+    "duration_ms": 24881,
+    "duration_api_ms": 25888,
+    "is_error": false,
+    "session_id": "d87d5ddb-4dec-489a-a7aa-c64bf70b3656",
+    "model_usage_keys": [
+      "claude-haiku-4-5-20251001",
+      "claude-sonnet-5"
+    ],
+    "id": "WRQ-016",
+    "rep": 3,
+    "wall_s": 26.3,
+    "rc": 0
+  }
+]

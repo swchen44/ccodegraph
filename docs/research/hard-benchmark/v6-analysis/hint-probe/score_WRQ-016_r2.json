@@ -1,0 +1,1 @@
+{"lsp":{"score":3,"justification":"The answer gives the exact GT count of 70 and explicitly states all matches are under src/ with none in deps/ or modules/other directories, plus describes cross-checking with two grep patterns. This satisfies the GT rubric for full credit; the full file list is not required for a 3."}}
