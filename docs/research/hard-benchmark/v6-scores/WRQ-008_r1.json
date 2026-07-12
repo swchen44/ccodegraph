@@ -1,14 +1,1 @@
-{
-  "none": {
-    "score": 3,
-    "justification": "Matches the required chain through processCommand/lookupCommand, function-pointer dispatch to setCommand, setGenericCommand, lookupKeyWriteWithLink, and setKeyByLink. It also gives the required exists vs new-key split to dbSetValue or dbAddByLink -> dbAddInternal, so it satisfies the GT scoring rubric despite extra lower-layer detail."
-  },
-  "ccodegraph": {
-    "score": 3,
-    "justification": "Correctly identifies the dispatch path, setCommand/setGenericCommand, lookupKeyWriteWithLink, setKeyByLink at db.c:754, and the required branch split: existing keys go to dbSetValue, missing keys to dbAddByLink -> dbAddInternal. It stops at kvstore as the lower boundary, but the GT rubric’s key requirement is met."
-  },
-  "lsp": {
-    "score": 3,
-    "justification": "Contains the full required path and explicitly names setKeyByLink plus the exists/non-exists split to dbSetValue and dbAddByLink -> dbAddInternal. It adds extra kvstore/dict details beyond the GT target, but those do not contradict the required answer."
-  }
-}
+{"none":{"score":3,"justification":"Matches the GT chain through processCommand/lookupCommand, command proc dispatch to setCommand, setGenericCommand, lookupKeyWriteWithLink, and setKeyByLink. It also includes the required exists vs missing split into dbSetValue vs dbAddByLink -> dbAddInternal, so it meets the score-3 rubric despite extra lower-level detail."},"ccodegraph":{"score":3,"justification":"Correctly names setKeyByLink and the required branch split: existing keys go to dbSetValue and new keys go to dbAddByLink -> dbAddInternal, with the dispatch path through processCommand, lookupCommand, call, setCommand, and setGenericCommand. It is slightly light on the notifyKeyspaceEvent details, but the GT scoring note says the branch split plus setKeyByLink is sufficient for 3."},"lsp":{"score":3,"justification":"Gives the full required path from processCommand/lookupCommand through call -> setCommand -> setGenericCommand, includes lookupKeyWriteWithLink, setKeyByLink, and the exists/new-key branches to dbSetValue or dbAddByLink -> dbAddInternal. Extra discussion of dict internals does not hurt because the GT-required db.c branch structure is present."}}

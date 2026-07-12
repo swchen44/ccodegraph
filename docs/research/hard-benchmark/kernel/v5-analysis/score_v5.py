@@ -13,6 +13,9 @@ QUESTIONS = os.path.join(KDIR, "questions-kernel.jsonl")
 SCHEMA = "/Users/swchen.tw/.claude/jobs/5e00d3b7/tmp/analysis/score_schema.json"
 
 
+ANS_CAP = 12000   # v6.1 協定修正回灌:4000 會截斷長清單答案誤導評分者
+
+
 def gt_text(qid):
     with open(os.path.join(KDIR, f"gt_{qid}.md")) as f:
         text = f.read()
@@ -60,16 +63,16 @@ facts differ — honor those addenda over full-tree statements when they exist.
 ## score, citing what matched or didn't match the GT.
 
 ### Answer A (tool="none", grep/read only)
-{answers['none'][:4000]}
+{answers['none'][:ANS_CAP]}
 
 ### Answer B (tool="ccodegraph")
-{answers['ccodegraph'][:4000]}
+{answers['ccodegraph'][:ANS_CAP]}
 
 ### Answer C (tool="codegraph", third-party)
-{answers['codegraph'][:4000]}
+{answers['codegraph'][:ANS_CAP]}
 
 ### Answer D (tool="cbm", third-party)
-{answers['cbm'][:4000]}
+{answers['cbm'][:ANS_CAP]}
 
 Return your scores as JSON matching the required schema, using these EXACT
 keys for the four answers: "none" (Answer A), "ccodegraph" (Answer B),

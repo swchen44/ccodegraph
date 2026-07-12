@@ -46,7 +46,7 @@ REPOS = {
 REAL_COMPDB = {k: os.path.join(v, "compile_commands.json")
                for k, v in REPOS.items()}
 MODEL = "claude-sonnet-5"
-TOOLS = ("none", "ccodegraph", "lsp")
+TOOLS = ("none", "ccodegraph", "lsp", "lspskill")
 N_REPS = 3
 V6_WORK = os.path.expanduser("~/kernel-bench/v6-lsp")
 LSP_PLUGIN_KEY = "clangd-lsp@local-bench"
@@ -201,15 +201,20 @@ def _fingerprint(root: str, repo: str) -> dict[str, Any]:
     return {"n_files": n_files, "hashes": hashes}
 
 
-def lsp_workdir(repo: str) -> str:
-    return os.path.join(V6_WORK, f"work-lsp-{repo}")
+def lsp_workdir(repo: str, variant: str = "lsp") -> str:
+    return os.path.join(V6_WORK, f"work-{variant}-{repo}")
 
 
-def prep_lsp_tree(repo: str) -> None:
+# lspskill 臂(精調教學層實驗):與 lsp 臂唯一差異 = 種入
+# .claude/skills/lsp-nav/SKILL.md(prompt 一字不改,單變因)。
+LSP_SKILL_SRC = os.path.join(V6_WORK, "skill", "SKILL-current.md")
+
+
+def prep_lsp_tree(repo: str, variant: str = "lsp") -> None:
     """固定工作樹一次性準備;已備好且指紋相符 → 直接重用。"""
-    root = lsp_workdir(repo)
-    meta_path = os.path.join(V6_WORK, f"lsp-index-meta-{repo}.json")
-    fp_path = os.path.join(V6_WORK, f"lsp-fingerprint-{repo}.json")
+    root = lsp_workdir(repo, variant)
+    meta_path = os.path.join(V6_WORK, f"{variant}-index-meta-{repo}.json")
+    fp_path = os.path.join(V6_WORK, f"{variant}-fingerprint-{repo}.json")
     if os.path.exists(fp_path) and os.path.isdir(root):
         with open(fp_path) as f:
             want = json.load(f)
@@ -219,7 +224,8 @@ def prep_lsp_tree(repo: str) -> None:
                 return
         except OSError:
             pass
-        print(f"    [lsp] {repo} 工作樹指紋不符/快取缺失 → 重備", flush=True)
+        print(f"    [{variant}] {repo} 工作樹指紋不符/快取缺失 → 重備",
+              flush=True)
     shutil.rmtree(root, ignore_errors=True)
     os.makedirs(root, exist_ok=True)
     clean_copy(REPOS[repo], root)
@@ -228,7 +234,11 @@ def prep_lsp_tree(repo: str) -> None:
     os.makedirs(os.path.join(root, ".claude"), exist_ok=True)
     with open(os.path.join(root, ".claude", "settings.json"), "w") as f:
         json.dump({"enabledPlugins": {LSP_PLUGIN_KEY: True}}, f, indent=2)
-    print(f"    [lsp] {repo}: compile DB {n} entries,預熱 clangd 索引…",
+    if variant == "lspskill":
+        sk_dir = os.path.join(root, ".claude", "skills", "lsp-nav")
+        os.makedirs(sk_dir, exist_ok=True)
+        shutil.copy(LSP_SKILL_SRC, os.path.join(sk_dir, "SKILL.md"))
+    print(f"    [{variant}] {repo}: compile DB {n} entries,預熱 clangd 索引…",
           flush=True)
     wall, shards = lsp_prewarm(root)
     with open(meta_path, "w") as f:
@@ -237,7 +247,7 @@ def prep_lsp_tree(repo: str) -> None:
                    "index_shards": shards}, f, indent=2)
     with open(fp_path, "w") as f:
         json.dump(_fingerprint(root, repo), f, indent=2)
-    print(f"    [lsp] {repo}: 預熱 {wall:.0f}s,index shards={shards}",
+    print(f"    [{variant}] {repo}: 預熱 {wall:.0f}s,index shards={shards}",
           flush=True)
 
 
@@ -276,7 +286,14 @@ def prep_lsp(q: dict[str, Any]) -> tuple[str, str, bool]:
             lsp_workdir(q["repo"]), False)
 
 
-PREP = {"none": prep_none, "ccodegraph": prep_ccodegraph, "lsp": prep_lsp}
+def prep_lspskill(q: dict[str, Any]) -> tuple[str, str, bool]:
+    prep_lsp_tree(q["repo"], variant="lspskill")
+    return (LSP_TEMPLATE.format(question=q["question"]),
+            lsp_workdir(q["repo"], "lspskill"), False)
+
+
+PREP = {"none": prep_none, "ccodegraph": prep_ccodegraph, "lsp": prep_lsp,
+        "lspskill": prep_lspskill}
 
 
 def summarize(out_path: str) -> dict[str, Any]:

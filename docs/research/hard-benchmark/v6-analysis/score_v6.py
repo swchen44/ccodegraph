@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 """v6 codex 評分 — 3-slot(none/ccodegraph/lsp),每 (題, rep) 一次 = 66 呼叫。
+
+v6.1 協定修正(2026-07-12):答案視窗 4000 → 12000 字元。WRQ-009 類長清單
+答案(實測最長 5,618)被 4000 截斷,評分者看到「中途斷掉」而誤判 2 ——
+「評分者視圖被工程細節弄殘」教訓第四次(LKQ-006 GT 截斷的答案版)。
 GT 沿用 v3/v4:questions.jsonl 的 evaluation_notes + gt_WRQ-XXX.md。
 評分 rubric 文字與 v3/v4/v5 相同(0-3,獨立判定,引用 GT 依據)。
 用法:score_v6.py <runs_dir> <out_dir> [WRQ-XXX ...]
@@ -15,6 +19,7 @@ QUESTIONS = os.path.join(HB, "questions.jsonl")
 SCHEMA = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                       "score_schema.json")
 ARMS = ("none", "ccodegraph", "lsp")
+ANS_CAP = 12000   # v6.1:原 4000 會截斷長清單答案,誤導評分者
 
 
 def gt_text(qid):
@@ -58,13 +63,13 @@ be skeptical of confident-sounding but unverifiable claims.
 ## score, citing what matched or didn't match the GT.
 
 ### Answer A (tool="none", grep/read only)
-{answers['none'][:4000]}
+{answers['none'][:ANS_CAP]}
 
 ### Answer B (tool="ccodegraph")
-{answers['ccodegraph'][:4000]}
+{answers['ccodegraph'][:ANS_CAP]}
 
 ### Answer C (tool="lsp", clangd LSP via compile_commands.json)
-{answers['lsp'][:4000]}
+{answers['lsp'][:ANS_CAP]}
 
 Return your scores as JSON matching the required schema, using these EXACT
 keys for the three answers: "none" (Answer A), "ccodegraph" (Answer B),

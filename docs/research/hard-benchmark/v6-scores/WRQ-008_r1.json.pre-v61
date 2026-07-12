@@ -1,0 +1,14 @@
+{
+  "none": {
+    "score": 3,
+    "justification": "Matches the required chain through processCommand/lookupCommand, function-pointer dispatch to setCommand, setGenericCommand, lookupKeyWriteWithLink, and setKeyByLink. It also gives the required exists vs new-key split to dbSetValue or dbAddByLink -> dbAddInternal, so it satisfies the GT scoring rubric despite extra lower-layer detail."
+  },
+  "ccodegraph": {
+    "score": 3,
+    "justification": "Correctly identifies the dispatch path, setCommand/setGenericCommand, lookupKeyWriteWithLink, setKeyByLink at db.c:754, and the required branch split: existing keys go to dbSetValue, missing keys to dbAddByLink -> dbAddInternal. It stops at kvstore as the lower boundary, but the GT rubric’s key requirement is met."
+  },
+  "lsp": {
+    "score": 3,
+    "justification": "Contains the full required path and explicitly names setKeyByLink plus the exists/non-exists split to dbSetValue and dbAddByLink -> dbAddInternal. It adds extra kvstore/dict details beyond the GT target, but those do not contradict the required answer."
+  }
+}
