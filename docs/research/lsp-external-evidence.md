@@ -107,6 +107,62 @@ cbm 論文的 10× 省是在無範圍限定的大庫題型),後者在 C 上 grep
    只有 ccodegraph 認真做的區域;而「中小 repo 導航」這個區域,
    官方 grep 已經夠好,不是戰場。
 
+## FAQ(2026-07-13,使用者提問實錄)
+
+### Q1:LSP 好處在寫碼,是什麼原理?
+
+四個機制:
+
+1. **編輯後即時診斷(最大宗)**:LSP 的 `publishDiagnostics` 通道——
+   agent 每做一次 Edit,語言伺服器毫秒級重新做型別/語意檢查,錯誤
+   **直接推進 agent 的 context**(Claude Code plugin 的 `diagnostics`
+   欄位預設 true 就是這個)。原理是**回饋迴路的週期壓縮**:沒有它,
+   要等 build/test(分鐘級)才知道改壞,且錯的 edit 讓後續 edits 疊在
+   錯誤上——錯誤有複利;有了它,每個 edit 的錯當下被抓、不累積。
+   ManoMano 重構 1,017 測試全過 vs 內建 LSP 留 9 個失敗,差的就是
+   這條迴路的品質。
+2. **生成時約束(MGD,NeurIPS'23)**:LLM 逐 token 生成時用 LSP 查
+   「此位置合法的成員/方法集合」,把下一個 token 限制在合法集合內
+   ——結構上不可能拼出不存在的 API。靜態分析當解碼約束器。
+3. **語意閉包操作**:rename/改簽名是全域一致性問題,LSP 一次改對
+   所有引用(含跨檔與同名消歧);文字替換必然漏改或誤傷。
+4. **為什麼「寫」比「讀」受益大**:讀的錯誤=漏一條引用(扣一分);
+   寫的錯誤=build 壞(二值失敗)。且驗證成本不對稱:讀的答案要 GT
+   才能驗,寫的結果 diagnostics 免費當裁判——**LSP 在寫碼側等於
+   白送一個毫秒級裁判**,這是它在導航問答側沒有的角色。
+
+### Q2:「快」不也是優點?找 code flow 時 grep 要讀檔迭代,問 ccodegraph 直接列出來,理論上快很多,難道不是?
+
+**單查詢延遲層:完全正確**——`callers X` 一次 SQL 毫秒級,grep 追鏈
+是「grep→讀→再 grep」多輪。外部的「30s→50ms、900×」講的就是這層。
+
+**任務總時間層:被兩個效應吃掉**(v6 實測):
+
+| | wall 中位 | turns 中位 |
+|---|---|---|
+| none(grep) | 39s | 6 |
+| ccodegraph | 49s | 9 |
+| WRQ-008 呼叫鏈題 | none 76-107s(16-23 turns) | ccodegraph 78-103s(**14-18 turns**) |
+
+呼叫鏈題上 ccodegraph turns 確實較少(工具優勢真實),但牆鐘打平:
+
+1. **任務時間 ≈ turns × LLM 推理延遲,工具執行是零頭**——每 turn
+   模型思考 3-6 秒,工具 50ms 或 30s 只是零頭,大頭在模型腦子裡。
+2. **省下的預算被紀律再投資**:SKILL 教的交叉驗證/讀 cited lines 把
+   省下的 turns 拿去覆核而不是提早交卷——**速度紅利被轉換成正確性
+   紅利**(+3 分的來源)。要快就得砍覆核,分數就掉;是取捨不是損失。
+
+**直覺會兌現成真快的三個條件**:①鏈更深(題庫鏈深 ~3-5 層差距小,
+八層十層的 kernel 級鏈才拉開;v5 上 ccodegraph token 已省 17% 是規模
+兌現的訊號);②庫更大且題無範圍限定(grep 每輪全庫掃描 token 線性
+增長、圖查詢輸出恆定——cbm 的 10× token 差在這個 regime);③人在等
+的互動場景(50ms vs 30s 的體感是人類「省心」的主體,批次 agent 任務
+中被稀釋)。
+
+一句話:**「快」的兌換率取決於瓶頸在哪**——瓶頸在搜尋輪次(深鏈/
+大庫/無範圍)時兌現為速度;瓶頸在模型推理時兌現為「多出來的覆核
+預算」,也就是分數。v6 屬於後者。
+
 ## Sources
 
 - [ManoMano: Benchmarking AI Coding Agents (Claude vs Claude Code vs Serena, 36K Java)](https://medium.com/manomano-tech/project-aegis-benchmarking-ai-agents-and-why-serena-is-our-new-must-have-311673db35dd)
