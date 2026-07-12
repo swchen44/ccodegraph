@@ -17,7 +17,8 @@ def load_scores():
     for p in glob.glob(f"{SCORES}/*.json"):
         base = os.path.basename(p)[:-5]
         qid, rep = base.rsplit("_r", 1)
-        d = json.load(open(p))
+        with open(p) as fh:
+            d = json.load(fh)
         m[(qid, int(rep))] = {a: (d[a]["score"], d[a]["justification"])
                               for a in ARMS}
     return m
@@ -25,9 +26,9 @@ def load_scores():
 
 def main():
     scores = load_scores()
-    summary = {(x["id"], x["tool"], x.get("rep", 1)): x
-               for x in json.load(open(f"{RUNS}/summary.json"))
-               if x.get("rc") == 0}
+    with open(f"{RUNS}/summary.json") as fh:
+        summary = {(x["id"], x["tool"], x.get("rep", 1)): x
+                   for x in json.load(fh) if x.get("rc") == 0}
 
     print("## 分數矩陣(每格 = r1/r2/r3 → 中位)")
     totals = {a: 0 for a in ARMS}
@@ -48,7 +49,7 @@ def main():
                 var_flags.append((qid, a, reps))
             row += f"{'/'.join(map(str, reps)) + ' → ' + str(med):>18s}"
         print(row)
-    print(f"\n## 總分(中位數加總,滿分 66)")
+    print("\n## 總分(中位數加總,滿分 66)")
     for a in ARMS:
         cost = sum(summary[(q, a, r)]["cost_usd"]
                    for q in QIDS for r in (1, 2, 3)
@@ -56,7 +57,7 @@ def main():
         cpp = cost / totals[a] if totals[a] else 0
         print(f"  {a:11s} {totals[a]}/66  總成本 ${cost:.2f}"
               f"  每分成本 ${cpp:.3f}(3 reps 合計)")
-    print(f"\n## 跨 rep 變異 ≥2 分的組(N=3 穩定性)")
+    print("\n## 跨 rep 變異 ≥2 分的組(N=3 穩定性)")
     if not var_flags:
         print("  無")
     for qid, a, reps in var_flags:
@@ -73,16 +74,15 @@ def main():
             if key not in summary:
                 continue
             sid = summary[key]["session_id"]
-            repo = "wpa" if any(
-                x["id"] == qid and x.get("repo") == "wpa"
-                for x in []) else None
             hits = glob.glob(os.path.expanduser(
                 f"~/.claude/projects/-Users-swchen-tw-kernel-bench-"
                 f"v6-lsp-work-lsp-*/{sid}.jsonl"))
             if not hits:
                 continue
             n_lsp = 0
-            for line in open(hits[0]):
+            with open(hits[0]) as fh:
+                lines_iter = fh.readlines()
+            for line in lines_iter:
                 if '"tool_use"' not in line:
                     continue
                 try:
