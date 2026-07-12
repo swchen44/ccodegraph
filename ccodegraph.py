@@ -181,7 +181,15 @@ PENDING_LAYERS: list[tuple[str, str]] = [
     ("clangd", "L4: 高信心 calls/uses_type/signature 升級(需 compile DB)"),
 ]
 
-SCHEMA_SQL = """
+# B3:次要索引拆出——54.8M 邊的全樹建圖,邊插邊維護索引是寫入大頭;
+# bulk load 後一次建立快得多。SCHEMA_SQL(公開合約)仍含全部索引。
+SCHEMA_INDEXES_SQL = """
+CREATE INDEX idx_nodes_name ON nodes(name);
+CREATE INDEX idx_edges_src ON edges(src);
+CREATE INDEX idx_edges_dst ON edges(dst);
+"""
+
+SCHEMA_BASE_SQL = """
 CREATE TABLE meta  (key TEXT PRIMARY KEY, value TEXT);
 CREATE TABLE files (
   path TEXT PRIMARY KEY, lang TEXT, content_hash TEXT,
@@ -203,9 +211,6 @@ CREATE TABLE edges (
   origin TEXT NOT NULL, confidence REAL NOT NULL,
   meta TEXT DEFAULT '{}',
   UNIQUE(src, dst, kind, origin, file, line));
-CREATE INDEX idx_nodes_name ON nodes(name);
-CREATE INDEX idx_edges_src ON edges(src);
-CREATE INDEX idx_edges_dst ON edges(dst);
 CREATE VIEW edge_pairs AS
   SELECT src, dst, kind, MAX(confidence) AS confidence,
          MIN(printf('%s:%09d', file, line)) AS first_site,
@@ -217,6 +222,8 @@ CREATE VIEW file_deps AS
   FROM edges e JOIN nodes n2 ON e.dst = n2.id
   WHERE e.file IS NOT NULL AND e.file != n2.file;
 """
+
+SCHEMA_SQL = SCHEMA_BASE_SQL + SCHEMA_INDEXES_SQL
 
 
 # ---------------------------------------------------------------- 純函式層
@@ -1185,7 +1192,12 @@ def build(root: str, db_path: str, jobs: int,
     if os.path.exists(tmp_db):
         os.remove(tmp_db)
     con = sqlite3.connect(tmp_db)
-    con.executescript(SCHEMA_SQL)
+    # B3:寫進 temp 檔、成功才 os.replace——中途崩潰 = 丟棄 temp,
+    # 所以 journal/synchronous 可以整段關掉;次要索引 bulk load 後才建。
+    con.executescript(
+        "PRAGMA journal_mode=OFF; PRAGMA synchronous=OFF;"
+        "PRAGMA cache_size=-262144; PRAGMA temp_store=MEMORY;")
+    con.executescript(SCHEMA_BASE_SQL)
     head = git_head(root)
     now = time.strftime("%Y-%m-%dT%H:%M:%S")
     con.executemany(
@@ -1220,13 +1232,24 @@ def build(root: str, db_path: str, jobs: int,
                "macro": mc_index}[str(d["kind"])]
         idx.setdefault(d["name"], []).append(d)
 
+    # B3:邊插入批次緩衝——全樹 54.8M 條逐列 execute 的 Python/SQLite
+    # 語句開銷是分鐘級;executemany 分批沖洗。INSERT OR IGNORE 的去重
+    # 語意不受順序影響(重複列內容完全相同)。
+    edge_buf: list[tuple[Any, ...]] = []
+
+    def flush_edges() -> None:
+        if edge_buf:
+            con.executemany(
+                "INSERT OR IGNORE INTO edges (src,dst,kind,file,line,origin,"
+                "confidence,meta) VALUES (?,?,?,?,?,?,?,?)", edge_buf)
+            edge_buf.clear()
+
     def add_edge(src_id: int, dst_id: int, kind: str, file: str | None,
                  line: int | None, origin: str, meta: str = "{}") -> None:
-        con.execute(
-            "INSERT OR IGNORE INTO edges (src,dst,kind,file,line,origin,"
-            "confidence,meta) VALUES (?,?,?,?,?,?,?,?)",
-            (src_id, dst_id, kind, file, line, origin,
-             CONFIDENCE[origin], meta))
+        edge_buf.append((src_id, dst_id, kind, file, line, origin,
+                         CONFIDENCE[origin], meta))
+        if len(edge_buf) >= 100_000:
+            flush_edges()
 
     if incremental:
         # 鍵必須含 kind:qname 跨 kind 可撞名(wpa_printf 同時是 function
@@ -1407,6 +1430,8 @@ def build(root: str, db_path: str, jobs: int,
         "module_map": os.path.basename(module_map) if module_map else None,
         "cscope_skipped": len(CSCOPE_SKIPPED),
         "seconds": round(time.time() - t0, 1)})
+    flush_edges()
+    con.executescript(SCHEMA_INDEXES_SQL)   # B3:次要索引 bulk load 後建
     con.execute("INSERT INTO meta VALUES ('history',?)",
                 (json.dumps(old_history, ensure_ascii=False),))
     con.execute("INSERT INTO meta VALUES ('root',?)", (root,))

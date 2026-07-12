@@ -160,7 +160,7 @@ edge counts at 57k files (reads alone: 28.3M).
 2. [docs/design.md](docs/design.md) — **How**: Schema Contract (§1.5, every legal value enumerated), decision records **D1–D17** (including overturned ones and why), roadmap
 3. [docs/traceability.md](docs/traceability.md) — every FR/NFR mapped to its verification
 4. [docs/reviews/](docs/reviews/) — three codex red-team rounds and their dispositions (NFR6)
-5. [docs/research/](docs/research/) — clink anatomy, token spike, six rounds of LLM A/B benchmarks (v1 pilot → v5 Linux kernel → v6 clangd-LSP shootout), cscope query-engine bug evidence (D17)
+5. [docs/research/](docs/research/) — clink anatomy, token spike, six rounds of LLM A/B benchmarks (v1 pilot → v5 Linux kernel → v6 clangd-LSP shootout), cscope query-engine bug evidence (D17), teaching-layer methodology, benchmark methodology
 
 ## Development SOP (rules paid for in blood)
 
