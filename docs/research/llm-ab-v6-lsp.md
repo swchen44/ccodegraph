@@ -393,6 +393,12 @@ without-build 的枚舉原語(includes/#ifdef/多 config)那一小塊。
    (通用,+1~+4)> 使用時機提示(單句無效)> hybrid 定位器(ccodegraph
    出座標;在本題庫上價值被 3 壓制,留給換題庫後重估)。
 
+**適用域聲明**:以上結論成立於 *C 語言 × 唯讀導航問答 × 中型 repo ×
+題目帶範圍限定*;不可外推到編輯迴路(改碼後診斷/重構+build 必過——
+LSP 的真正主場,本輪未測)、TS/Java 等 grep 弱勢語言、149K+ 行大庫。
+外部正面經驗與本輪結果的系統性對照(含四類主張的原始證據與「裝了
+不用」的社群互證):`lsp-external-evidence.md`。
+
 複現指引:`hard-benchmark/v6-analysis/REPRODUCE.md`(環境、plugin、
 compile DB、逐 phase 指令、預期數字)。
 
