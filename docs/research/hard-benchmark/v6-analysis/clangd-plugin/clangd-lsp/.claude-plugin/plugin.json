@@ -1,0 +1,5 @@
+{
+  "name": "clangd-lsp",
+  "description": "clangd LSP for C/C++ (reads compile_commands.json at project root)",
+  "version": "0.1.0"
+}

@@ -1,0 +1,5 @@
+{
+  "name": "local-bench",
+  "owner": { "name": "bench" },
+  "plugins": [ { "name": "clangd-lsp", "source": "./clangd-lsp" } ]
+}

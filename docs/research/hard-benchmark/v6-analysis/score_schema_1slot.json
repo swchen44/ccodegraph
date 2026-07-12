@@ -1,0 +1,1 @@
+{"type": "object", "properties": {"lsp": {"type": "object", "properties": {"score": {"type": "integer", "minimum": 0, "maximum": 3}, "justification": {"type": "string"}}, "required": ["score", "justification"], "additionalProperties": false}}, "required": ["lsp"], "additionalProperties": false}
