@@ -463,6 +463,19 @@ wpa/redis 重建 dump 逐位元等價證明)。子樹 fresh build ×3:22.49 / 21
 163×)——圖建得出來,訊噪比與體積成為新的開放問題(依 v5 §12.2 凍結令,
 留待真實使用者反饋決定是否處理)。
 
+**B3 spike:全樹 SQLite 寫入優化——假設被推翻,已 revert(2026-07-13)**。
+假設「62min 中 user 只有 620s,大頭是逐列 INSERT 的語句開銷」→ 實作
+PRAGMA(journal OFF/synchronous OFF/大 cache)+ 次要索引延後建 +
+add_edge 10 萬條批次緩衝。wpa/redis 邊集逐位元零回歸、子樹 21.7s 持平
+——但全樹實測:基線 3,715s → B3 3,903s → B3+2GB cache **4,328s**,
+不僅沒快反而更慢。真瓶頸是 **edges 表 UNIQUE(src,dst,kind,origin,file,
+line) 約束的隱式索引**:54.8M 條插入對 16GB btree 做隨機探測去重,
+disk-bound——這個索引是去重語意本身,不能延後也不能繞過(Python 端
+去重需 ~11GB RAM,8GB 機器不可行)。三個表層優化全部無效,程式碼
+revert 至 v0.0.6 版(163 tests 綠)。教訓:**優化前先剖析 I/O wait,
+user/sys 時間差不等於 Python 開銷**。全樹 62min 維持現狀,依凍結令
+留待使用者反饋決定是否值得結構性方案(如 schema 層去重策略變更)。
+
 ## 8.6 第二輪紅隊(文件盲區)處置(2026-07-05)
 
 報告:[reviews/2026-07-05-codex-docs-round2.md](reviews/2026-07-05-codex-docs-round2.md)。
