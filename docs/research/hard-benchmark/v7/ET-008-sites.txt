@@ -1,0 +1,38 @@
+src/geo.c:988:    if ((zobj = lookupKeyReadOrReply(c, c->argv[1], shared.null[c->resp]))
+src/t_array.c:386:    robj *o = lookupKeyReadOrReply(c, c->argv[1], shared.czero);
+src/t_array.c:398:    robj *o = lookupKeyReadOrReply(c, c->argv[1], shared.czero);
+src/t_stream.c:2730:    if ((kv = lookupKeyReadOrReply(c, c->argv[1], shared.emptyarray)) == NULL ||
+src/t_stream.c:2764:    if ((kv = lookupKeyReadOrReply(c, c->argv[1], shared.czero)) == NULL
+src/t_stream.c:5436:    kvobj *kv = lookupKeyReadOrReply(c, key, shared.nokeyerr);
+src/t_set.c:787:    if ((set = lookupKeyReadOrReply(c,c->argv[1],shared.czero)) == NULL ||
+src/t_set.c:824:    if ((kv = lookupKeyReadOrReply(c,c->argv[1],shared.czero)) == NULL ||
+src/t_set.c:1151:    if ((set = lookupKeyReadOrReply(c,c->argv[1],shared.emptyarray))
+src/t_set.c:1351:    if ((set = lookupKeyReadOrReply(c,c->argv[1],shared.null[c->resp]))
+src/t_set.c:2040:    if ((set = lookupKeyReadOrReply(c,c->argv[1],shared.emptyscan)) == NULL ||
+src/t_list.c:605:    kvobj *kv = lookupKeyReadOrReply(c,c->argv[1],shared.czero);
+src/t_list.c:612:    kvobj *o = lookupKeyReadOrReply(c,c->argv[1],shared.null[c->resp]);
+src/t_list.c:921:    if ((o = lookupKeyReadOrReply(c,c->argv[1],shared.emptyarray)) == NULL
+src/bitops.c:905:    kvobj *kv = lookupKeyReadOrReply(c, c->argv[1], shared.czero);
+src/t_string.c:464:    if ((o = lookupKeyReadOrReply(c, c->argv[1], shared.null[c->resp])) == NULL)
+src/t_string.c:508:    if ((o = lookupKeyReadOrReply(c,c->argv[1],shared.null[c->resp])) == NULL)
+src/t_string.c:660:    if ((o = lookupKeyReadOrReply(c,c->argv[1],shared.emptybulk)) == NULL ||
+src/t_string.c:1414:    if ((kv = lookupKeyReadOrReply(c, c->argv[1], shared.czero)) == NULL ||
+src/t_string.c:1675:    if ((o = lookupKeyReadOrReply(c, c->argv[1], shared.null[c->resp])) == NULL)
+src/db.c:384:kvobj *lookupKeyReadOrReply(client *c, robj *key, robj *reply) {
+src/t_zset.c:3659:    if ((zobj = lookupKeyReadOrReply(c, key, shared.czero)) == NULL ||
+src/t_zset.c:3734:    if ((zobj = lookupKeyReadOrReply(c, key, shared.czero)) == NULL ||
+src/t_zset.c:4086:    if ((zobj = lookupKeyReadOrReply(c,key,shared.czero)) == NULL ||
+src/t_zset.c:4098:    if ((zobj = lookupKeyReadOrReply(c,key,shared.null[c->resp])) == NULL ||
+src/t_zset.c:4157:    if ((zobj = lookupKeyReadOrReply(c, key, reply)) == NULL || checkType(c, zobj, OBJ_ZSET)) {
+src/t_zset.c:4197:    if ((o = lookupKeyReadOrReply(c,c->argv[1],shared.emptyscan)) == NULL ||
+src/t_zset.c:4511:    if ((zsetobj = lookupKeyReadOrReply(c, c->argv[1], shared.emptyarray))
+src/t_zset.c:4744:    if ((zset = lookupKeyReadOrReply(c,c->argv[1],shared.null[c->resp]))== NULL ||
+src/server.h:4054:kvobj *lookupKeyReadOrReply(client *c, robj *key, robj *reply);
+src/t_hash.c:2715:    if ((o = lookupKeyReadOrReply(c,c->argv[1],shared.null[c->resp])) == NULL ||
+src/t_hash.c:3114:    if ((o = lookupKeyReadOrReply(c,c->argv[1],shared.czero)) == NULL ||
+src/t_hash.c:3126:    if ((o = lookupKeyReadOrReply(c,c->argv[1],shared.czero)) == NULL ||
+src/t_hash.c:3172:    if ((o = lookupKeyReadOrReply(c,c->argv[1],emptyResp))
+src/t_hash.c:3295:    if ((o = lookupKeyReadOrReply(c,c->argv[1],shared.czero)) == NULL ||
+src/t_hash.c:3308:    if ((o = lookupKeyReadOrReply(c,c->argv[1],shared.emptyscan)) == NULL ||
+src/t_hash.c:3351:    if ((hash = lookupKeyReadOrReply(c,c->argv[1],shared.emptyarray))
+src/t_hash.c:3627:    if ((hash = lookupKeyReadOrReply(c,c->argv[1],shared.null[c->resp]))== NULL ||

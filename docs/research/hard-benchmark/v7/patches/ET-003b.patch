@@ -1,0 +1,11 @@
+--- /tmp/lat.bak	2026-07-19 17:56:34
++++ src/latency.c	2026-07-19 17:56:43
+@@ -86,7 +86,7 @@
+     }
+ 
+     ts->samples[ts->idx].time = now;
+-    ts->samples[ts->idx].latency = latency;
++    ts->samples[ts->idx].latency_ms = latency;
+ 
+     ts->idx++;
+     if (ts->idx == LATENCY_TS_LEN) ts->idx = 0;

@@ -1,0 +1,11 @@
+--- /tmp/ts.bak	2026-07-19 17:56:34
++++ src/t_string.c	2026-07-19 17:56:34
+@@ -601,7 +601,7 @@
+         }
+ 
+         /* Return when the resulting string exceeds allowed size */
+-        if (checkStringLength(c,offset,value_len) != C_OK)
++        if (checkStrLength(c,offset,value_len) != C_OK)
+             return;
+ 
+         newLen = offset+value_len;

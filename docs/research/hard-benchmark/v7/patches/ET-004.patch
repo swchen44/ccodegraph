@@ -1,0 +1,55 @@
+--- /tmp/config_file.c.v7bak	2026-07-19 17:57:25
++++ wpa_supplicant/config_file.c	2026-07-19 17:57:25
+@@ -26,7 +26,7 @@
+ 
+ static int newline_terminated(const char *buf, size_t buflen)
+ {
+-	size_t len = os_strlen(buf);
++	size_t len = os_strlength(buf);
+ 	if (len == 0)
+ 		return 0;
+ 	if (len == buflen - 1 && buf[buflen - 1] != '\r' &&
+--- /tmp/scan.c.v7bak	2026-07-19 17:57:25
++++ wpa_supplicant/scan.c	2026-07-19 17:57:25
+@@ -1134,7 +1134,7 @@
+ 	} else {
+ 		wpa_dbg(wpa_s, MSG_DEBUG, "Setting scan request: %d.%06d sec",
+ 			sec, usec);
+-		eloop_register_timeout(sec, usec, wpa_supplicant_scan, wpa_s, NULL);
++		eloop_register_timeout(sec, usec, wpa_supplicant_scan, wpa_s);
+ 	}
+ }
+ 
+--- /tmp/events.c.v7bak	2026-07-19 17:57:25
++++ wpa_supplicant/events.c	2026-07-19 17:57:35
+@@ -129,7 +129,7 @@
+ 	struct wpa_supplicant *wpa_s, const u8 *bssid)
+ {
+ 	struct wpa_bss *bss = NULL;
+-	struct wpa_ssid *ssid = wpa_s->current_ssid;
++	struct wpa_ssid *ssid = wpa_s->cur_ssid;
+ 
+ 	if (ssid->ssid_len > 0)
+ 		bss = wpa_bss_get(wpa_s, bssid, ssid->ssid, ssid->ssid_len);
+--- /tmp/eloop.c.v7bak	2026-07-19 17:57:25
++++ src/utils/eloop.c	2026-07-19 17:57:35
+@@ -612,7 +612,7 @@
+ 		os_free(timeout);
+ 		return -1;
+ 	}
+-	now_sec = timeout->time.sec;
++	now_sec = timeout->time.seconds;
+ 	timeout->time.sec += secs;
+ 	if (timeout->time.sec < now_sec) {
+ 		/*
+--- /tmp/wpa.c.v7bak	2026-07-19 17:57:25
++++ src/rsn_supp/wpa.c	2026-07-19 17:57:35
+@@ -100,7 +100,7 @@
+ 	else if (wpa_key_mgmt_ft(sm->key_mgmt) ||
+ 		 wpa_key_mgmt_sha256(sm->key_mgmt))
+ 		ver = WPA_KEY_INFO_TYPE_AES_128_CMAC;
+-	else if (sm->pairwise_cipher != WPA_CIPHER_TKIP)
++	else if (sm->pairwise_ciph != WPA_CIPHER_TKIP)
+ 		ver = WPA_KEY_INFO_TYPE_HMAC_SHA1_AES;
+ 	else
+ 		ver = WPA_KEY_INFO_TYPE_HMAC_MD5_RC4;
