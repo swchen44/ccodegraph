@@ -70,14 +70,25 @@ build 輪);「改壞再改回」次數。
 (qid, arm, rep)、timeout 上調 2400s(含 build 時間)、
 `--max-budget-usd 4`。8 × 4 × 3 = **96 runs**。
 
-## 5. Phase 0 閘門(開工後最先驗,兩個都可能斃掉整案)
+## 5. Phase 0 閘門——已驗完(2026-07-19)
 
-1. **可編譯性**:乾淨樹的 wpa(v2/v3 build config)與 redis 在本機
-   `make` 全綠;注入 patch 後 make 如預期失敗。
-2. **headless 下 diagnostics 推送真的發生**:v6 只驗了 LSP 查詢工具,
-   沒驗「Edit 後自動推診斷」在 `claude -p` 是否工作;smoke 1 題看
-   transcript 有無 diagnostics 注入。不工作 → 停下回報選備援
-   (如 hook 包 make 模擬推送 vs 改實驗問題)。
+1. **可編譯性:PASS**。redis 乾淨樹 `make -j8` 全綠(69.7s)。wpa 需
+   五步 config 修正才全綠(2.9s,三 binary):OpenSSL 3 不相容 → 
+   `CONFIG_TLS=internal`+`CONFIG_CRYPTO=internal`;`CONFIG_SME` 實為
+   `NEED_SME`(Makefile 內部變數);SAE 需 internal crypto 沒有的 ECC
+   → 拿掉 `CONFIG_SAE`;`CONFIG_L2_PACKET=freebsd`(macOS 無
+   netpacket/packet.h);`CONFIG_OSX=y`(關 -lrt)。**過程本身是雙閘控
+   陷阱的真實案例集**。定稿 config:`~/kernel-bench/v7/wpa-build.config`
+   (副本見 v7-analysis 歸檔)。
+2. **diagnostics 推送:原生通道間歇、hook 通道可靠**。三發探測:
+   前兩發(含 clangd 已啟動、findReferences 正常的那發)編輯後
+   diagnostics 全 null;第三發(背景索引就緒後)**原生推送出現**
+   (`✘ [Line 19:28] ... (clang)` 注入 agent context)。同場驗證的
+   PostToolUse hook 通道(`clangd --check` 該檔 → additionalContext)
+   單元與端到端皆 100% 工作。**通道決策**:lsp-on 臂 = 原生 plugin +
+   hook 診斷(保證每次 Edit 有回饋;原生間歇性如實記錄,本身即發現);
+   lsp-off 臂 = 原生 plugin(`diagnostics:false`)、無 hook。
+   hook 腳本:`~/kernel-bench/v7/gate-diag/diag-hook.sh`。
 
 ## 6. 時程與預算
 
