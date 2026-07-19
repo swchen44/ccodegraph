@@ -1,0 +1,31 @@
+# v8 slow-build wrapper(模擬 monorepo/CI 級 build 成本)
+ifeq ($(V8_INNER),1)
+include Makefile.real
+else
+V8_DELAY ?= __DELAY__
+export V8_INNER := 1
+.DEFAULT_GOAL := __v8_default
+.SUFFIXES:
+# 擋 GNU make 的 Makefile remaking(否則 %: 攔到 Makefile 目標,整包多付一次)
+Makefile: ;
+Makefile.real: ;
+GNUmakefile: ;
+makefile: ;
+.PHONY: __v8_default FORCE
+__v8_default:
+	@echo "[v8] forced clean rebuild..."
+	@$(MAKE) -f Makefile.real clean >/dev/null 2>&1 || true
+	@sleep $(V8_DELAY)
+	@$(MAKE) -f Makefile.real
+%.o: FORCE
+	@echo "[v8] forced clean rebuild..."
+	@$(MAKE) -f Makefile.real clean >/dev/null 2>&1 || true
+	@sleep $(V8_DELAY)
+	@$(MAKE) -f Makefile.real
+%: FORCE
+	@echo "[v8] forced clean rebuild..."
+	@$(MAKE) -f Makefile.real clean >/dev/null 2>&1 || true
+	@sleep $(V8_DELAY)
+	@$(MAKE) -f Makefile.real $@
+FORCE:
+endif
