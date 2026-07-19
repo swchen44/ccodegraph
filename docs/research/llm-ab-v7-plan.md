@@ -8,34 +8,49 @@
 > **方法論紅利**:裁判從 codex 換成**編譯器**——build 過/測試過/站點
 > 改齊全是機械二值,比 0-3 評分乾淨一個等級。
 
-## 使用者已拍板(2026-07-19)
+## 使用者已拍板(2026-07-19,二次修訂同日)
 
 四臂(含 diag-off 隔離臂)/ 8 題全套 N=3 / 混合難度梯度 / 專注 C(TS 留 v8)。
+**二次修訂**:①compile DB 各用其自然條件——lsp 臂用 bear 真實 DB(其生存
+前提),ccodegraph 臂**合成模式、當作沒有 compile DB**(其 zero-build 定位
+主張)——實驗從「同輸入對決」升級為「路線對決」,報告明標;②題庫必須
+含 LSP 優勢設計區(v6 教訓:鑑別軸垂直於 LSP 能力軸)——新增**型別傳播**
+族(文字搜尋盲區,詳 §2)。
 
 ## 1. 四臂設計
 
-| 臂 | 工具 | 差異點 |
-|---|---|---|
-| none | grep/read/edit + 可自跑 `make` | 基線 |
-| **lsp-on** | + clangd plugin(`diagnostics: true`) | **受測通道:編輯後自動推錯誤進 context** |
-| **lsp-off** | + clangd plugin(`diagnostics: false`) | 導航能力同上、無自動診斷——**隔離 diagnostics 的淨貢獻** |
-| ccodegraph | + 圖工具(SKILL) | 域外誠實測;呼叫點枚舉理論上幫「改齊」 |
+| 臂 | 工具 | compile DB | 差異點 |
+|---|---|---|---|
+| none | grep/read/edit + 可自跑 `make` | — | 基線 |
+| **lsp-on** | + clangd plugin(`diagnostics: true`) | **bear 真實 DB**(路線前提) | **受測通道:編輯後自動推錯誤進 context** |
+| **lsp-off** | + clangd plugin(`diagnostics: false`) | bear 真實 DB | 導航同上、無自動診斷——**隔離 diagnostics 淨貢獻** |
+| ccodegraph | + 圖工具(SKILL) | **無——合成模式**(zero-build 定位) | 域外誠實測;呼叫點枚舉理論上幫「改齊」 |
+
+compile DB 設計(使用者拍板):兩條路線各用**自然條件**——LSP 沒有正確
+DB 就不工作(這個前置成本是路線的一部分),ccodegraph 的主張就是不需要
+它。此為「路線對決」而非「同輸入對決」,結論解讀時明標。驗收裁判
+(`make`)對所有臂一視同仁,不受此影響。
 
 lsp-on vs lsp-off 的差 = diagnostics 淨值;lsp-off vs none 的差 = LSP 導航在編輯任務的殘值。
 四臂都能自跑 make(真實條件);prompt 比照 v6 待遇原則,smoke 後凍結。
 
 ## 2. 題目(8 題,四族 × 一易一難;wpa/redis 各 4)
 
-| 族 | 易(呼叫點 <5、≤2 檔) | 難(≥10 站點、跨 ≥3 檔) | 機械驗收 |
-|---|---|---|---|
-| 改簽名 | redis:小工具函式加參數 | wpa:熱門 util 函式加參數(呼叫點 10+) | build 過 + GT 站點全改(殘留舊簽名 grep=0) |
-| 抽結構 | wpa:小 struct 抽 2 欄位 | redis:熱門 struct 抽欄位群(ManoMano 式) | build 過 + 測試過 |
-| 修注入錯 | redis:注入 2 個型別誤用 | wpa:注入 5 個(跨檔、含漏 include) | build 過 + 注入清單全中(patch 可重現) |
-| API 遷移 | wpa:低頻 API 換名 | redis:高頻 API 換名+參數順序變 | build 過 + 殘留舊呼叫 grep=0 |
+**題庫光譜原則**(v6 教訓的直接修正):每個工具的理論優勢區都要有題、
+設計意圖明標——v3-v6 一直有 ccodegraph 優勢區(雙閘控),v7 補上 LSP
+優勢區。誰真的在自己優勢區拿分,正是實驗要回答的。
 
-選題原則:呼叫點數用圖+grep 雙法預數(GT);注入錯誤以 patch 檔固定
-(可重現);難題失敗率高是**設計目標**(v6 飽和教訓——要的就是能拉開
-差距的區間)。
+| 族 | 設計意圖 | 易 | 難 | 機械驗收 |
+|---|---|---|---|---|
+| **型別傳播**(LSP 優勢設計區) | 改 struct 欄位/回傳型別(如 int→long long),受影響站點(printf 格式、int 接收、隱式截斷比較)**文字不含被改名字——grep 全盲,唯型別檢查可見** | redis:低扇出欄位改型別 | wpa:高扇出欄位改型別(受影響站點 10+ 跨 3 檔) | build 過(-Werror 級警告清零)+ GT 受影響站點全修 |
+| 修注入錯(偏 LSP:診斷直指) | 注入**編譯器可見型**錯誤(型別誤用、漏 include、enum 漏 case) | redis:注入 2 個 | wpa:注入 5 個跨檔 | build 過 + 注入清單全中(patch 可重現) |
+| 抽結構(中性) | 多檔重構(ManoMano 式) | wpa:小 struct 抽 2 欄位 | redis:熱門 struct 抽欄位群 | build 過 + 測試過 |
+| API 遷移(偏文字工具:對照區) | 舊 API 換新(文字可搜) | wpa:低頻 API 換名 | redis:高頻 API 換名+參數順序變 | build 過 + 殘留舊呼叫 grep=0 |
+
+(原「改簽名」族併入型別傳播——改簽名仍可 grep 函式名定位,鋒利度不如
+型別傳播的文字盲區。)選題原則:受影響站點數用「改後 make 的錯誤清單」
+預先實測定 GT(比圖+grep 更權威——編譯器親自點名);注入錯誤以 patch
+檔固定;難題失敗率高是設計目標。
 
 ## 3. 指標
 
