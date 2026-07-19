@@ -145,10 +145,38 @@ candidates, STALE handling.
 D17 = parse cscope.out directly (one pass replaces per-symbol queries); it
 also fixed three classes of phantom bugs in cscope's own `-L` query engine —
 engineering record in `docs/design.md` §8.5.6, bug evidence in
-`docs/research/cscope-query-engine-bugs.md`, the four-tool kernel shootout in
-`docs/research/llm-ab-v5-linux-kernel.md` (§4.1 is the post-D17 addendum).
-Open problem at full-tree scale: same-name ambiguous attachment (D3) explodes
-edge counts at 57k files (reads alone: 28.3M).
+`docs/research/cscope-query-engine-bugs.md` (filed upstream:
+[cscope #306](https://sourceforge.net/p/cscope/bugs/306/)), the four-tool
+kernel shootout in `docs/research/llm-ab-v5-linux-kernel.md` (§4.1 is the
+post-D17 addendum). Open problem at full-tree scale: same-name ambiguous
+attachment (D3) explodes edge counts at 57k files (reads alone: 28.3M).
+
+### The LSP shootout (v6, 2026-07-12/13; 22 questions × N=3, independently graded)
+
+An external suggestion — "Claude Code's LSP + compile_commands.json works
+well too" — put to a same-venue controlled test (wpa/redis, real compile
+DBs, frozen prompts):
+
+| arm | score /66 | cost per point |
+|---|---|---|
+| plain grep/read | 60 | $0.290 |
+| clangd LSP plugin (out of box) | 60 | $0.336 |
+| LSP + a SKILL-level teaching layer (66-run follow-up) | 61 | $0.431 |
+| **ccodegraph** | **63** | $0.347 |
+
+Key findings: ① **tool presence ≠ tool usage** — with the prompt saying
+"prefer LSP", 36% of runs never invoked it once (342 Bash calls vs 117
+LSP calls); `incomingCalls`, the killer feature for "who calls X", was
+used 4 times all told; ② a one-line "prefer LSP" hint measurably does
+nothing (9-run probe), while a full teaching skill made usage more
+*precise* (call-hierarchy ops 5→26) yet bought exactly +1 point;
+③ clangd's `findReferences` can be **silently incomplete** (a measured
+case of 4 returned out of hundreds, no warning) — always cross-check
+counts. Scope: C × read-only navigation × medium repos; the edit loop
+(diagnostics) is LSP's real home turf and was not tested this round.
+Full report: `docs/research/llm-ab-v6-lsp.md` (with a REPRODUCE.md
+package), external-evidence reconciliation:
+`docs/research/lsp-external-evidence.md`.
 
 ---
 

@@ -138,9 +138,33 @@ SKILL 核心是**風險判讀章**:每級 confidence「怎麼錯」、`semantic:
 
 D17 = 直接解析 cscope.out(單遍取代逐符號查詢),順帶修掉 cscope 自身
 `-L` 查詢引擎的三類幻影 bug——工程記錄見 `docs/design.md` §8.5.6,bug
-證據見 `docs/research/cscope-query-engine-bugs.md`,kernel 四工具對決見
-`docs/research/llm-ab-v5-linux-kernel.md`(§4.1 為 D17 後追記)。全樹的
-開放問題:同名歧義掛靠(D3)在 57k 檔規模讓邊數爆炸(reads 一項 28.3M)。
+證據見 `docs/research/cscope-query-engine-bugs.md`(已報 upstream:
+[cscope #306](https://sourceforge.net/p/cscope/bugs/306/)),kernel
+四工具對決見 `docs/research/llm-ab-v5-linux-kernel.md`(§4.1 為 D17 後
+追記)。全樹的開放問題:同名歧義掛靠(D3)在 57k 檔規模讓邊數爆炸
+(reads 一項 28.3M)。
+
+### LSP 對決(v6,2026-07-12/13;22 題 × N=3,codex 獨立評分)
+
+外部建議「Claude Code 的 LSP + compile_commands.json 效果也不錯」→
+同場受控實測(wpa/redis,真實 compile DB,frozen prompts):
+
+| 臂 | 總分/66 | 每分成本 |
+|---|---|---|
+| 純 grep/read | 60 | $0.290 |
+| clangd LSP plugin(out-of-box) | 60 | $0.336 |
+| LSP + SKILL 級教學層(後續 66 runs) | 61 | $0.431 |
+| **ccodegraph** | **63** | $0.347 |
+
+關鍵發現:①**工具在場 ≠ 工具被用**——prompt 明說「優先用 LSP」仍有
+36% 的 runs 一次都沒碰(Bash 342 次 vs LSP 117 次),殺手鐧
+`incomingCalls` 全場只被用 4 次;②「prefer LSP」單句提示實測無效
+(9-run 探針),SKILL 級教學讓使用**更準**(call-hierarchy 5→26 次)
+但只買到 +1 分;③clangd 的 `findReferences` 會**靜默不完整**(實錘
+回 4/數百且無警告)——計數必互核。適用域:C × 唯讀導航 × 中型 repo;
+編輯迴路(diagnostics)是 LSP 真正主場,本輪未測。完整報告
+`docs/research/llm-ab-v6-lsp.md`(含可重現包 REPRODUCE.md),外部
+證據對照 `docs/research/lsp-external-evidence.md`。
 
 ---
 
