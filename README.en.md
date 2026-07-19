@@ -164,6 +164,7 @@ against pre-verified ground truth; all raw run/grade JSONs archived.
 | v4 | same, after teaching-layer rework | ccodegraph rerun | **58→62** at **-9.4%** cost per point — the gain is all teaching layer | `llm-ab-v4-token-efficiency.md` |
 | v5 | **Linux kernel** subtree, 7.6k files, 20 questions (N=3) | same four arms | QA near-tie: 58/59/**60**/59 (/60, codegraph on top); **indexing is the real gate**: on the full 57k-file tree only ccodegraph finished (62 min) — cbm crashed, codegraph OOM'd | `llm-ab-v5-linux-kernel.md` |
 | v6 | wpa+redis, 22 questions (N=3) | grep/clangd LSP/ccodegraph (+ tuned-LSP arm) | table below | `llm-ab-v6-lsp.md` |
+| v7 | wpa+redis, 8 **edit tasks** (N=3, compiler-judged) | grep/lsp-on/lsp-off/ccodegraph | **all four arms 24/24, dead tie** — diagnostics=make (the agent's native workflow carries its own feedback loop); LSP queries nearly extinct in edit tasks (5 calls/96 runs) | `llm-ab-v7-edit-loop.md` |
 
 **v6: the LSP shootout** (external suggestion "LSP + compile DB works
 well too" → controlled test):
