@@ -151,11 +151,22 @@ kernel shootout in `docs/research/llm-ab-v5-linux-kernel.md` (§4.1 is the
 post-D17 addendum). Open problem at full-tree scale: same-name ambiguous
 attachment (D3) explodes edge counts at 57k files (reads alone: 28.3M).
 
-### The LSP shootout (v6, 2026-07-12/13; 22 questions × N=3, independently graded)
+### Six rounds of LLM benchmarks at a glance (2026-07; methodology: `docs/research/benchmark-methodology.md`)
 
-An external suggestion — "Claude Code's LSP + compile_commands.json works
-well too" — put to a same-venue controlled test (wpa/redis, real compile
-DBs, frozen prompts):
+Every round: isolated clean trees, frozen prompts, independent grading
+against pre-verified ground truth; all raw run/grade JSONs archived.
+**Negative results published as-is.**
+
+| round | arena | arms | result | report |
+|---|---|---|---|---|
+| v1 | wpa, 5 tasks (N=1) | ccodegraph vs bare grep | correctness **5/5 vs 3/5** (grep silently wrong twice), tokens even | `llm-ab.md` |
+| v3 | wpa+redis, 22 questions (N=1) | grep/ccodegraph/CodeGraph/cbm | 54/**58**/58/57 (/66) — graph tools directionally ahead, but ccodegraph costliest per point | `llm-ab-v3-full-suite.md` |
+| v4 | same, after teaching-layer rework | ccodegraph rerun | **58→62** at **-9.4%** cost per point — the gain is all teaching layer | `llm-ab-v4-token-efficiency.md` |
+| v5 | **Linux kernel** subtree, 7.6k files, 20 questions (N=3) | same four arms | QA near-tie: 58/59/**60**/59 (/60, codegraph on top); **indexing is the real gate**: on the full 57k-file tree only ccodegraph finished (62 min) — cbm crashed, codegraph OOM'd | `llm-ab-v5-linux-kernel.md` |
+| v6 | wpa+redis, 22 questions (N=3) | grep/clangd LSP/ccodegraph (+ tuned-LSP arm) | table below | `llm-ab-v6-lsp.md` |
+
+**v6: the LSP shootout** (external suggestion "LSP + compile DB works
+well too" → controlled test):
 
 | arm | score /66 | cost per point |
 |---|---|---|
@@ -164,19 +175,23 @@ DBs, frozen prompts):
 | LSP + a SKILL-level teaching layer (66-run follow-up) | 61 | $0.431 |
 | **ccodegraph** | **63** | $0.347 |
 
-Key findings: ① **tool presence ≠ tool usage** — with the prompt saying
-"prefer LSP", 36% of runs never invoked it once (342 Bash calls vs 117
-LSP calls); `incomingCalls`, the killer feature for "who calls X", was
-used 4 times all told; ② a one-line "prefer LSP" hint measurably does
+v6 key findings: ① **tool presence ≠ tool usage** — with the prompt
+saying "prefer LSP", 36% of runs never invoked it once (342 Bash calls
+vs 117 LSP calls); ② a one-line "prefer LSP" hint measurably does
 nothing (9-run probe), while a full teaching skill made usage more
 *precise* (call-hierarchy ops 5→26) yet bought exactly +1 point;
 ③ clangd's `findReferences` can be **silently incomplete** (a measured
 case of 4 returned out of hundreds, no warning) — always cross-check
-counts. Scope: C × read-only navigation × medium repos; the edit loop
-(diagnostics) is LSP's real home turf and was not tested this round.
-Full report: `docs/research/llm-ab-v6-lsp.md` (with a REPRODUCE.md
-package), external-evidence reconciliation:
-`docs/research/lsp-external-evidence.md`.
+counts.
+
+The through-line across rounds: **the teaching layer sets a tool's
+ceiling** (same discipline: ccodegraph +4, clangd +1, a one-liner +0 —
+`teaching-layer-methodology.md`); **scale is the real divide**
+(disciplined grep nearly matches everything on medium repos; kernel-
+scale index feasibility and macro/multi-config enumeration are where
+structured tools genuinely differ). Scope: C × read-only navigation;
+the edit loop (diagnostics) is LSP's home turf, untested. External
+evidence reconciliation: `docs/research/lsp-external-evidence.md`.
 
 ---
 
