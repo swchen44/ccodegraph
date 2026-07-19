@@ -57,7 +57,7 @@ ARMS = ("none", "lsp-on", "lsp-off", "ccodegraph")
 N_REPS = 3
 
 BASE_TAIL = ("此專案 build 較慢:每次 make(任何目標)都會強制全量"
-             "重建,約需 2 分鐘,請自行權衡驗證策略。\n"
+             "重建,約需 1 分鐘,請自行權衡驗證策略。\n"
              "任務:{task}\n完成修改後即可結束(不需要 git 操作、"
              "不需要總結報告,確保 build 通過即可)。")
 
@@ -177,8 +177,10 @@ def prep(q: dict[str, Any], arm: str) -> tuple[str, str]:
 
 
 WRAPPER_TMPL = os.path.expanduser("~/kernel-bench/v8/make-wrapper.tmpl")
-WRAP_SPEC = {"redis": ("src/Makefile", "85"),
-             "wpa": ("wpa_supplicant/Makefile", "100")}
+# 校準至每次 make ≈ 60s(使用者定案 2026-07-20;實測:wpa 總時 =
+# delay+~10s、redis = delay+~34s)
+WRAP_SPEC = {"redis": ("src/Makefile", "25"),
+             "wpa": ("wpa_supplicant/Makefile", "50")}
 
 
 def install_slow_wrapper(repo: str, tree: str) -> None:
