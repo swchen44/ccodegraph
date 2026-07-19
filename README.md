@@ -172,6 +172,27 @@ v6 關鍵發現:①**工具在場 ≠ 工具被用**——prompt 明說「優先
 5→26 次)但只買到 +1 分;③clangd `findReferences` 會**靜默不完整**
 (實錘回 4/數百且無警告)——計數必互核。
 
+### 名詞對照(benchmark 系列術語;不熟這些行話先看這裡)
+
+| 術語 | 出處 | 意思 | 例句 |
+|---|---|---|---|
+| **arm(臂)** | 臨床試驗 study arm | benchmark 裡的一種工具配置,各臂同題同條件對決 | 「lsp 臂有 36% 的 runs 一次都沒呼叫 LSP」 |
+| **GT**(Ground Truth) | 機器學習/評測 | 預先驗證過的標準答案(每題一份 `gt_WRQ-XXX.md`),評分者對它打 0-3 分 | 「GT 實測 70 個 include,agent 答 66 → 0 分」 |
+| **oracle** | 軟體測試 test oracle | 當裁判用的權威參照;「oracle 也要驗」= 裁判自己也會錯 | 「以真 cscope 為 oracle 差分測試我們的 parser,反而抓到 oracle 的 bug」 |
+| **雙閘控** | 本專案自創(v4) | config 相依碼有兩層開關:檔內 `#ifdef` **和** build 系統(Makefile `OBJS +=`/Kconfig),只查一層會漏整批檔案 | 「WRQ-013 是雙閘控題:sae.c 整檔由 Makefile 閘控,grep `#ifdef` 找不到」 |
+| **spike** | 敏捷開發 | 限時探索實驗:先訂驗收數字與時間盒,快速驗證可行性,失敗即棄 | 「D17 spike 兩天時間盒:Day 1 假設被推翻,按預設路線轉 Day 2」 |
+| **DNF**(Did Not Finish) | 賽車/田徑 | 索引沒跑完(超時/crash/OOM),誠實記為未完成 | 「cbm 全樹 DNF:26GB 記憶體足跡 crash」 |
+| **零回歸** | 軟體測試 regression | 改動後品質一點都不倒退;「邊數零回歸」= 新舊圖邊集逐位元比對,消失的邊必須證明是舊引擎的錯 | 「D17 驗收紅線:wpa/redis 邊數零回歸,-q 方案因此被斃」 |
+| **wall(牆鐘)** | 系統效能 wall-clock | 真實流逝時間(你等了多久),對比 user/sys(CPU 運算時間);兩者的差=在等 I/O | 「全樹 wall 62min 但 user 只 10min——大頭在磁碟」 |
+| **N=3 / rep** | 統計 | 同一格子跑 3 次(rep 1/2/3)取中位數,排除單次抽樣運氣 | 「WRQ-019 smoke(N=1)給 3,全量 N=3 中位只有 2」 |
+| **smoke** | 軟體測試 smoke test | 全量前先跑少量樣本驗證管線與行為,結論不採計 | 「先 2 題 smoke 確認 LSP 臂真的在用工具,才進 198 runs」 |
+| **幻影(phantom)** | 本專案自創(D17) | 工具回報、但該行原始碼根本沒有該符號的假站點 | 「舊圖消失的 92 個站點經幻影判定 100% 是 cscope 查詢引擎的錯」 |
+| **差分測試** | 軟體測試 differential testing | 兩個獨立實作餵同一輸入、逐筆對拍輸出,不一致處必有一方錯 | 「parser vs 真 cscope 對拍 3,400 條查詢,殘差反向指認 oracle 的三類 bug」 |
+| **同場/跨場** | 本專案慣用 | 同場=同一天同條件重跑的臂才可直接比分;跨場=不同輪的分數只能看趨勢(模型/環境會漂移) | 「none 臂 v3→v6 從 54 漂到 60,所以 v6 結論只用同場三臂」 |
+| **凍結(frozen)** | 實驗設計 | prompt/條件定稿後全量期間一字不改,改動只能發生在 smoke 階段並記錄 | 「LSP prompt smoke 後凍結,精調臂只加 SKILL 檔、prompt 一字未動」 |
+| **headless** | 軟體工程 | 無互動的批次模式(`claude -p`),benchmark 全部以此執行保證條件一致 | 「198 個 headless runs,每發獨立乾淨樹」 |
+| **turns** | agent 領域 | agent 的思考-呼叫工具往返回合數;任務耗時 ≈ turns × 模型推理延遲 | 「ccodegraph 臂 turns 較少(9 vs 16),省下的回合被拿去覆核」 |
+
 跨輪主線:**教學層決定工具天花板**(同一套紀律:ccodegraph +4、clangd
 +1、單句 +0——`teaching-layer-methodology.md`);**規模才是分水嶺**
 (中型 repo 上有紀律的 grep 幾乎追平一切,kernel 級的索引可行性與巨集/

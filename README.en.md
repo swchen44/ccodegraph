@@ -184,6 +184,27 @@ nothing (9-run probe), while a full teaching skill made usage more
 case of 4 returned out of hundreds, no warning) — always cross-check
 counts.
 
+### Glossary (benchmark-series jargon, with examples)
+
+| term | origin | meaning | example |
+|---|---|---|---|
+| **arm** | clinical trials | one tool configuration in the benchmark; arms compete on identical questions/conditions | "36% of lsp-arm runs never called LSP once" |
+| **GT** (ground truth) | ML/evaluation | the pre-verified correct answer (one `gt_WRQ-XXX.md` per question) that the grader scores 0-3 against | "GT counts 70 includers; the agent said 66 → scored 0" |
+| **oracle** | software testing | the authority you judge outputs against; "verify your oracle" = the judge itself can be wrong | "differential-testing our parser against cscope-as-oracle ended up convicting the oracle" |
+| **dual-gating** | coined here (v4) | config-dependent code has TWO switches: in-file `#ifdef` AND the build system (Makefile `OBJS +=`/Kconfig); checking one layer misses whole files | "WRQ-013 is a dual-gating question: sae.c is gated by the Makefile, invisible to `#ifdef` grep" |
+| **spike** | agile | a timeboxed feasibility experiment with acceptance numbers fixed up front; discard on failure | "the D17 spike: Day 1's hypothesis was refuted, fell through to the planned Day 2" |
+| **DNF** (did not finish) | motorsport | indexing that never completed (timeout/crash/OOM), honestly recorded as such | "cbm DNF'd the full tree: crashed at a 26GB footprint" |
+| **zero regression** | software testing | no quality loss whatsoever after a change; "edge-count zero regression" = old/new graphs diffed edge-by-edge, every vanished edge must be proven an old-engine error | "D17's red line — the -q variant died on it" |
+| **wall** (wall-clock) | systems perf | real elapsed time (what you waited), vs user/sys CPU time; the gap = waiting on I/O | "full tree: 62 min wall but only ~10 min user — the disk is the story" |
+| **N=3 / rep** | statistics | each cell runs three times (reps 1/2/3), median taken, to kill single-draw luck | "WRQ-019 scored 3 in the N=1 smoke, median 2 at N=3" |
+| **smoke** | software testing | a small pre-flight run to validate the pipeline/behavior; never counted in conclusions | "2-question smoke to confirm the LSP arm actually uses the tool, then the 198-run batch" |
+| **phantom** | coined here (D17) | a site a tool reports where the source line does not contain the symbol at all | "all 92 vanished sites machine-verified as cscope query-engine phantoms" |
+| **differential testing** | software testing | feed two independent implementations the same input and diff outputs row-by-row; every mismatch convicts one side | "3,400 queries diffed parser-vs-cscope; the residue exposed three oracle bug classes" |
+| **same-venue / cross-venue** | house usage | only arms rerun together under identical conditions compare directly; cross-venue scores show trends only (models/envs drift) | "the none arm drifted 54→60 from v3 to v6, so v6 concludes from same-venue arms only" |
+| **frozen** | experimental design | prompts/conditions locked after smoke; zero edits during the full run, changes only in smoke and on the record | "the LSP prompt froze after smoke; the tuned arm added only a SKILL file, prompt untouched" |
+| **headless** | software eng. | non-interactive batch mode (`claude -p`); all benchmark runs execute this way for condition parity | "198 headless runs, each in a fresh isolated tree" |
+| **turns** | agent domain | the agent's think-then-call-tool round trips; task time ≈ turns × model latency | "the indexer arm used fewer turns (9 vs 16) and spent the savings on verification" |
+
 The through-line across rounds: **the teaching layer sets a tool's
 ceiling** (same discipline: ccodegraph +4, clangd +1, a one-liner +0 —
 `teaching-layer-methodology.md`); **scale is the real divide**
