@@ -15,9 +15,9 @@ two C repos (wpa_supplicant, redis) with real `compile_commands.json`:
 
 **Setup:** 22 code-navigation questions (find definitions, all
 references, callers, `#ifdef` enumeration, include counting, call-chain
-tracing…), 3 arms × 3 runs each = 198 headless runs, same model
-(sonnet), same prompts, scored 0-3 by a separate model against
-pre-verified ground truth.
+tracing…), 3 arms × 22 × 3 reps = 198 headless runs (plus a 66-run
+follow-up arm), same model (sonnet), same frozen prompts, scored 0-3 by
+a separate model against pre-verified ground truth.
 
 **Results (median totals out of 66):**
 
@@ -25,7 +25,13 @@ pre-verified ground truth.
 |---|---|---|
 | plain grep/read | 60 | $0.290 |
 | clangd LSP plugin (out of box) | 60 | $0.336 |
-| LSP + a hand-written skill teaching it *when/how* to use LSP | 61 | $0.431 |
+| LSP + a hand-written skill teaching it *when/how* to use LSP (follow-up) | 61 | $0.431 |
+| our own code-graph indexer (disclosure: we build it) | 63 | $0.347 |
+
+Full disclosure: we maintain that last tool, so we have a horse in this
+race — which is exactly why every prompt, run JSON, grade JSON and a
+step-by-step REPRODUCE.md are public. The LSP findings stand on their
+own regardless of our arm.
 
 **The most interesting part matches this sub's #1 complaint:** even with
 the plugin working and the prompt saying "prefer the LSP tool", **36% of
@@ -47,7 +53,9 @@ diagnostics), not navigation Q&A on C.
 Also caught along the way: clangd's `findReferences` can silently
 return a fraction of the true references with no warning (we have a
 case of 4 returned out of hundreds), so cross-check counts if you rely
-on it.
+on it. (Same oracle-trust lesson bit us with cscope's query engine —
+three bug classes, filed upstream with minimal repros:
+<https://sourceforge.net/p/cscope/bugs/306/>.)
 
 Everything is reproducible: harness, the clangd plugin (local
 marketplace), scoring prompts, raw run/grade JSONs, and a step-by-step

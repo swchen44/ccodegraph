@@ -8,7 +8,7 @@ v6 之後的方向。**發文動作由使用者本人執行**;本資料夾是可
 
 | 稿件 | 平台 | 主素材 | 風險/信譽 |
 |---|---|---|---|
-| `cscope-upstream-issue.md` | cscope 專案(SourceForge tracker / mailing list) | cscope 查詢引擎三類 bug + 最小重現 | 零風險,純貢獻,先發——後續貼文可引用它增加信譽 |
+| `cscope-upstream-issue.md` | cscope 專案(SourceForge tracker) | cscope 查詢引擎三類 bug + 最小重現 | **已投放(2026-07-19):https://sourceforge.net/p/cscope/bugs/306/** |
 | `reddit-claudecode.md` | r/ClaudeCode(v6 的靈感來源社群) | v6 LSP 對決 + 「裝了不用」的量化 | 直接回應社群自己的熱門話題,最可能有高質量反饋 |
 | `reddit-cprogramming.md` | r/C_Programming | cscope bugs + no-build C 索引器 | C 工具人群,對 cscope 議題有感 |
 | `hn.md` | Hacker News | v6 誠實負結果 + 可重現包 | 曝光最大、批評最狠;放最後,吸收前面反饋再發 |
