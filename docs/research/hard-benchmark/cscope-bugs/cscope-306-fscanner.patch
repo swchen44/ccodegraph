@@ -1,0 +1,40 @@
+--- a/src/fscanner.l	2017-11-07 08:14:58
++++ b/src/fscanner.l	2026-07-21 06:11:21
+@@ -517,6 +517,37 @@
+ 			 * reason for the parsing bug concerning function pointer usage,
+ 			 * I suspect. --- I think my new special-case rule for 'if'
+ 			 * could be helpful in removing that limitation */
++			{
++				/* Reject function-pointer declarators like
++				 * "T (*f)(args)": here the scanned identifier is
++				 * the return TYPE, not a function being defined.
++				 * Shape test on the text matched after the
++				 * identifier: first non-blank char inside the
++				 * parens is '*', and a ")(" follows.  Without
++				 * this, T is recorded as an unclosed function
++				 * definition whose phantom scope swallows the
++				 * callers of every subsequent file (see the
++				 * 20001003 FIXME above; sf bug #306). */
++				char *p = yytext;
++				while (*p == ' ' || *p == '\t' || *p == '\n')
++					++p;
++				if (*p == '(') {
++					++p;
++					while (*p == ' ' || *p == '\t' || *p == '\n')
++						++p;
++					if (*p == '*') {
++						char *q = strchr(p, ')');
++						if (q != NULL) {
++							++q;
++							while (*q == ' ' || *q == '\t' ||
++							       *q == '\n' || *q == '\r')
++								++q;
++							if (*q == '(')
++								goto fcncal;
++						}
++					}
++				}
++			}
+ 			if ((braces == 0 && ppdefine == NO && my_yytext[0] != '#' && rules == NO) ||
+ 			    (braces == 1 && classdef == YES)) {
+ 				fcndef = YES;

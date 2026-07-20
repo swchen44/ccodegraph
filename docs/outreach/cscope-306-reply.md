@@ -1,22 +1,19 @@
-# cscope #306 回覆稿(2026-07-21;回應 Hans-Bernhard Broeker)
+# cscope #306 回覆稿(2026-07-21;含 patch)
 
-發文者:使用者本人。貼 SourceForge 留言區。
+發文者:使用者本人。貼 SourceForge 留言區。附件:cscope-306-fscanner.patch。
 
 ---
 
-Thanks for looking at this — your instinct about function pointers was
-exactly the right thread to pull. We minimized the report down to a
-**6-line self-contained repro** that needs nothing from wpa_supplicant,
-and it also localizes the root cause. Details below, plus answers to
-your three points.
+Thanks — your function-pointer instinct was exactly right, so we chased
+it into the scanner and have a **root cause, a 6-line repro, and a
+candidate patch**.
 
-## Self-contained repro (2 files, 6 lines)
+## 6-line self-contained repro (no wpa_supplicant needed)
 
 ```c
 /* a.h */
 void register_handler(RxResult (*handler)(void), void *data);
 ```
-
 ```c
 /* b.c */
 static int dispatch(void)
@@ -25,59 +22,62 @@ static int dispatch(void)
 	return 0;
 }
 ```
-
 ```
 $ cscope -bk a.h b.c -f cs.out
 $ cscope -d -f cs.out -L3 probe_call
-b.c RxResult 3 probe_call();      <-- phantom caller from the OTHER file
+b.c RxResult 3 probe_call();      <-- phantom caller, from a DIFFERENT file
 b.c dispatch 3 probe_call();      <-- correct
 ```
 
-Every call site in b.c is attributed twice: once to the correct
-enclosing function, once to `RxResult` — an identifier that only occurs
-in a.h, inside a function-pointer parameter declaration.
+## Root cause (fscanner.l)
 
-## Root cause (cscope's own view)
+`cscope -d -f cs.out -L1 RxResult` shows it: the lexer records the
+return type of a function-pointer parameter as a **function
+definition**. In the `<WAS_IDENTIFIER>` rule, a declarator of shape
+`T (*f)(args)` matches the "a function definition" pattern — the
+identifier `T` is followed by `(`, and the `if (braces == 0 ...)` test
+passes. That phantom function has no body, so `fcndef`/`braces` leave
+its scope open; it then swallows the FCNCALL attribution of every
+subsequent file, producing the cross-file duplicate callers.
 
-```
-$ cscope -d -f cs.out -L1 RxResult
-a.h RxResult 1 void register_handler(RxResult (*handler)(void ), void *data);
-```
+This is precisely the case the `FIXME HBB 20001003` comment right above
+that rule anticipated ("the parsing bug concerning function pointer
+usage").
 
-The scanner records the *return type* of the function-pointer parameter
-as a **function definition**. That phantom "function" has no closing
-brace, so its scope never ends — it stays open across the end of a.h
-and swallows every subsequent file, which is why callers in unrelated
-files get double-attributed to it. (Ablation: removing the fn-ptr
-declaration line makes everything clean; single-line vs multi-line
-formatting is irrelevant.)
+## Candidate patch (attached: cscope-306-fscanner.patch)
 
-So yes — it's in the function-pointer handling as you suspected, but
-the observable result is a cross-file phantom *caller* whose name is a
-type, which I'd argue is a bug rather than a documented limitation.
+Adds a shape guard in that rule: if the text after the identifier is
+`( * ... ) (` — i.e. a function-pointer declarator — treat it as a
+function *call/use*, not a definition (`goto fcncal`). Verified:
 
-We believe classes 2 and 3 are downstream of the same
-open-phantom-scope state (the dropped/duplicated rows in radius_das.c
-sit exactly in the region shadowed by `RadiusRxResult` from
-radius_client.h, which has the same `RadiusRxResult (*handler)(...)`
-pattern at line ~239), but we've only hard-minimized class 1 so far.
+- the 6-line repro is fully clean after the patch (no phantom `RxResult`
+  definition, no duplicate caller, `-L1 RxResult` empty);
+- no regression on ordinary defs: `int f(int a){...}` and its calls are
+  still detected; a genuine fn-ptr-*returning* definition
+  `int (*g(int x))(void){...}` is unaffected.
 
-## On your specific points
+**Honest scope of the patch:** it fixes the minimal case and the common
+single-line `T (*f)(args)` form. In the real wpa header there is a
+*multi-line* variant where the arg-list parens open on the next line
+(`RadiusRxResult (*handler)\n(struct radius_msg *msg, ...)`) which my
+shape test doesn't yet catch — same root cause, harder to guard in the
+regex/lexer without your scanner expertise. I'd rather send you the
+localized cause and a working fix for the clean cases than a fragile
+catch-all. Happy to iterate.
 
-1. *"radius_das_disconnect unchanged for 14 years"* — agreed, and we
-   never meant the source changed; the claim was about the query
-   output. With the synthetic repro above the wpa tree is no longer
-   needed at all.
-2. *"17 call sites, not 8"* — that's the whole-tree count (it includes
-   radius_client.c etc.). Our "8" is the count **within
-   src/radius/radius_das.c only**; the report's claim is that querying
-   the whole-tree database and filtering to that one file returns 5 of
-   those 8 (compressed db) resp. a different subset (-c db).
-3. *"cannot reproduce class 3"* — worth noting our platform: macOS
-   arm64, cscope 15.9 built from the vanilla SourceForge tarball (the
-   Homebrew formula applies no patches). If you're on Linux this may
-   be platform-sensitive; the 6-line repro above reproduces class 1
-   deterministically here and should be a better cross-platform test
-   than the tree-dependent cases.
+## Your three points
 
-Happy to run any diagnostics you'd find useful.
+1. *radius_das_disconnect unchanged* — agreed; we never claimed the
+   source changed, only the query output, and the repro above removes
+   the tree dependency entirely.
+2. *17 vs 8* — 17 is the whole-tree count; our 8 was the in-file count
+   for src/radius/radius_das.c. Same numbers, different scope.
+3. *cannot reproduce class 3* — our platform is macOS/arm64, cscope
+   15.9 from the vanilla SourceForge tarball (Homebrew applies no
+   patches). The 6-line repro above should be deterministic
+   cross-platform; if it isn't for you, that itself is useful data.
+
+We believe classes 2 and 3 (dropped/drifted rows in radius_das.c) are
+downstream of the same open-phantom-scope from radius_client.h's
+`RadiusRxResult (*handler)` declaration, but we've only hard-minimized
+class 1.
