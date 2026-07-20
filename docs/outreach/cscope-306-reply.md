@@ -81,3 +81,13 @@ We believe classes 2 and 3 (dropped/drifted rows in radius_das.c) are
 downstream of the same open-phantom-scope from radius_client.h's
 `RadiusRxResult (*handler)` declaration, but we've only hard-minimized
 class 1.
+
+## Regression harness
+
+Since 15.9 ships no test suite (`make check` is a no-op), the patch
+comes with a small standalone regression script (attached:
+regress-306.sh) covering three cases: the bug (fn-ptr param must not
+create a phantom def), an ordinary function def+call must still be
+detected, and a genuine fn-ptr-*returning* definition must still be a
+def. Against stock 15.9 it reports case 1 FAIL; against the patched
+build, ALL PASS. Usage: `./regress-306.sh /path/to/cscope`.
