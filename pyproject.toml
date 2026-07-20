@@ -7,6 +7,8 @@ requires-python = ">=3.10"
 [tool.ruff]
 line-length = 100
 target-version = "py310"
+# codex 生成的一次性繪圖腳本(投放資訊圖產生器)是歸檔工件,非專案程式碼
+extend-exclude = ["docs/outreach/render_lsp_trilogy.py"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "N", "UP", "B", "SIM", "RUF"]
