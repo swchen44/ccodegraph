@@ -102,10 +102,12 @@ static int dispatch(void)
 **根因(cscope 自己的話)**:`-L1 RxResult` 顯示掃描器把 fn-ptr
 參數宣告的**回傳型別**記成了**函式定義**;該幻影函式無配對 `}`,
 範圍永不關閉,跨檔吞噬後續所有檔案的 caller 歸屬。消融:拿掉該
-宣告行即全乾淨;單行/多行格式無關。統一假說:Class 2 丟行與
-Class 3 漂移是同一「開放幻影範圍」的下游症狀(radius_das.c 的
-壞區恰在 radius_client.h `RadiusRxResult (*handler)` 的陰影裡),
-Class 1 已硬證,2/3 待各自最小化。repro 檔:
+宣告行即全乾淨;單行/多行格式無關。**統一假說已證(2026-07-21,patch 驗收)**:Class 2 丟行與
+Class 3 漂移確是同一「開放幻影範圍」的下游症狀——單一 fscanner.l
+patch 在真實 wpa 樹上同時消除三者:雙報 caller 5→0、正確站點 5/8→8/8、
+fst 檔案漂移(fst_internal.h:1255)消失、crossref 幻影標記 2→0。
+patch 與回歸腳本(regress-306.sh:含多行變體 case1b)、化簡來源鏈見
+`hard-benchmark/cscope-bugs/`。repro 檔:
 `hard-benchmark/cscope-bugs/`;issue 討論:
 <https://sourceforge.net/p/cscope/bugs/306/>。
 

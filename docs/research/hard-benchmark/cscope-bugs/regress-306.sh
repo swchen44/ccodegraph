@@ -27,6 +27,19 @@ dup=$("$CS" -d -f cs.out -L3 probe_call | grep -c ' RxResult ')
 l1=$("$CS" -d -f cs.out -L1 RxResult | wc -l | tr -d ' ')
 if [ "$dup" = 0 ] && [ "$l1" = 0 ]; then say "case1 fn-ptr phantom" "PASS"; else say "case1 fn-ptr phantom" "FAIL (dup=$dup l1=$l1)"; fail=1; fi
 
+# --- Case 1b: multi-line fn-ptr declaration (minimized from
+# radius_client.h:237-243) must also stay clean
+cat > e.h <<'H'
+struct data;
+int reg(struct data *d, int type,
+	RxResult (*handler)
+	(struct msg *m, void *ctx),
+	void *arg);
+H
+"$CS" -bk e.h b.c -f cs1b.out >/dev/null 2>&1
+ph=$(od -c cs1b.out 2>/dev/null | grep -c '$   R   x   R   e   s')
+if [ "$ph" = 0 ]; then say "case1b multi-line fn-ptr" "PASS"; else say "case1b multi-line fn-ptr" "FAIL (phantom marks=$ph)"; fail=1; fi
+
 # --- Case 2: ordinary function def must still be detected
 cat > c.c <<'C'
 int normal_func(int a, int b) { return a + b; }

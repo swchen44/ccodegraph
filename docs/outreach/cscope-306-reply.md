@@ -56,14 +56,20 @@ function *call/use*, not a definition (`goto fcncal`). Verified:
   still detected; a genuine fn-ptr-*returning* definition
   `int (*g(int x))(void){...}` is unaffected.
 
-**Honest scope of the patch:** it fixes the minimal case and the common
-single-line `T (*f)(args)` form. In the real wpa header there is a
-*multi-line* variant where the arg-list parens open on the next line
-(`RadiusRxResult (*handler)\n(struct radius_msg *msg, ...)`) which my
-shape test doesn't yet catch — same root cause, harder to guard in the
-regex/lexer without your scanner expertise. I'd rather send you the
-localized cause and a working fix for the clean cases than a fragile
-catch-all. Happy to iterate.
+**Verified on the real wpa tree (stock vs patched):** all three
+originally-reported classes trace to this one phantom scope and are
+resolved by the single patch —
+
+| symptom | stock | patched |
+|---|---|---|
+| duplicate `RadiusRxResult` caller on radius_das.c sites | 5 | 0 |
+| correct sites returned (of 8) | 5/8 | 8/8 |
+| phantom `fst_group_get_id` → `fst_internal.h:1255` (49-line file) | present | gone |
+| `$RadiusRxResult` phantom marks in the crossref | 2 | 0 |
+
+The multi-line form in radius_client.h (`RadiusRxResult (*handler)`
+with the arg parens on the next line) is covered too — regress-306.sh
+includes it as case 1b.
 
 ## Your three points
 
@@ -77,10 +83,10 @@ catch-all. Happy to iterate.
    patches). The 6-line repro above should be deterministic
    cross-platform; if it isn't for you, that itself is useful data.
 
-We believe classes 2 and 3 (dropped/drifted rows in radius_das.c) are
-downstream of the same open-phantom-scope from radius_client.h's
-`RadiusRxResult (*handler)` declaration, but we've only hard-minimized
-class 1.
+Classes 2 and 3 (dropped/drifted rows in radius_das.c) turned out to be
+downstream of exactly this same phantom scope — the table above shows
+them clearing together with class 1 under the one patch, which we take
+as confirmation of the shared root cause.
 
 ## Regression harness
 
