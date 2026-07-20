@@ -165,6 +165,7 @@ against pre-verified ground truth; all raw run/grade JSONs archived.
 | v5 | **Linux kernel** subtree, 7.6k files, 20 questions (N=3) | same four arms | QA near-tie: 58/59/**60**/59 (/60, codegraph on top); **indexing is the real gate**: on the full 57k-file tree only ccodegraph finished (62 min) — cbm crashed, codegraph OOM'd | `llm-ab-v5-linux-kernel.md` |
 | v6 | wpa+redis, 22 questions (N=3) | grep/clangd LSP/ccodegraph (+ tuned-LSP arm) | table below | `llm-ab-v6-lsp.md` |
 | v7 | wpa+redis, 8 **edit tasks** (N=3, compiler-judged) | grep/lsp-on/lsp-off/ccodegraph | **all four arms 24/24, dead tie** — diagnostics=make (the agent's native workflow carries its own feedback loop); LSP queries nearly extinct in edit tasks (5 calls/96 runs) | `llm-ab-v7-edit-loop.md` |
+| v8 | same, but **make made expensive** (forced ~60s full rebuild per invocation) | same four arms | **still all-PASS dead tie**; agents cut verification 83% and free-solo correctly — **the verification loop is optional at this difficulty**; LSP claims 0-for-3 (navigation=grep, editing=make, slow-build=skip verification) | `llm-ab-v8-slow-build.md` |
 
 **v6: the LSP shootout** (external suggestion "LSP + compile DB works
 well too" → controlled test):

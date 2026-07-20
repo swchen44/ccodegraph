@@ -157,6 +157,7 @@ JSON 全歸檔。**負結果照登**。
 | v5 | **Linux kernel** 子樹 7.6k 檔 20 題(N=3) | 同 v3 四臂 | QA:58/59/**60**/59(/60,codegraph 居首)幾乎打平;**索引才是分水嶺**:全樹 57k 檔只有 ccodegraph 完成(62min),cbm crash、codegraph OOM | `llm-ab-v5-linux-kernel.md` |
 | v6 | wpa+redis 22 題(N=3) | grep/clangd LSP/ccodegraph(+LSP 精調臂) | 見下表 | `llm-ab-v6-lsp.md` |
 | v7 | wpa+redis 8 個**編輯任務**(N=3,編譯器機械判分) | grep/lsp-on/lsp-off/ccodegraph | **四臂全 24/24 打平**——diagnostics=make(agent 天然工作流自帶診斷迴路);LSP 查詢在編輯任務近乎絕跡(5 次/96 runs) | `llm-ab-v7-edit-loop.md` |
+| v8 | 同 v7 但 **make 變貴**(每次強制全量重建 ~60s) | 同 v7 四臂 | **仍全 PASS 死平**;agent 砍 83% 驗證、裸交卷全對——**驗證迴路對此難度是可選項**;LSP 主張三連敗(導航=grep、編輯=make、慢build=不驗證) | `llm-ab-v8-slow-build.md` |
 
 **v6:LSP 對決**(外部建議「LSP + compile DB 效果也不錯」→ 受控實測):
 
