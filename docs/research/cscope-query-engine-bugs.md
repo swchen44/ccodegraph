@@ -79,6 +79,36 @@ radius_das.c 內 `radius_msg_get_attr_ptr` 實際有 **8** 個呼叫站點
   第四次出現:GT 會錯、評分者會信錯的 GT、評分者看到的 GT 視圖會被
   工程細節弄殘、oracle 工具自己有 bug)。
 
+## 2026-07-21 更新:6 行自包含 repro + 根因定位(delta 最小化產物)
+
+上游維護者回覆(質疑樹相依案例、指向 fn-ptr 方向)後,我們以
+ddmin(檔案集二分 → 行級二分 → 消融)把 Class 1 收斂到 **6 行、
+零依賴**:
+
+```c
+/* a.h */
+void register_handler(RxResult (*handler)(void), void *data);
+/* b.c */
+static int dispatch(void)
+{
+	probe_call();
+	return 0;
+}
+```
+
+`-L3 probe_call` → b.c 的呼叫站點被雙報:caller=`dispatch`(正確)
++ caller=**`RxResult`**(只存在於 a.h 的型別名——跨檔幻影)。
+
+**根因(cscope 自己的話)**:`-L1 RxResult` 顯示掃描器把 fn-ptr
+參數宣告的**回傳型別**記成了**函式定義**;該幻影函式無配對 `}`,
+範圍永不關閉,跨檔吞噬後續所有檔案的 caller 歸屬。消融:拿掉該
+宣告行即全乾淨;單行/多行格式無關。統一假說:Class 2 丟行與
+Class 3 漂移是同一「開放幻影範圍」的下游症狀(radius_das.c 的
+壞區恰在 radius_client.h `RadiusRxResult (*handler)` 的陰影裡),
+Class 1 已硬證,2/3 待各自最小化。repro 檔:
+`hard-benchmark/cscope-bugs/`;issue 討論:
+<https://sourceforge.net/p/cscope/bugs/306/>。
+
 ## 復現指引
 
 ```bash
